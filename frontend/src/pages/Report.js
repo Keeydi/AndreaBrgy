@@ -6,17 +6,16 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
-import { AlertTriangle, MapPin, Loader2, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, MapPin, Loader2, ChevronLeft, Phone, Flame, Droplets, Car, Shield, HelpCircle } from 'lucide-react';
 
 const REPORT_TYPES = [
-  { value: 'Emergency', label: 'Emergency', description: 'Fire, flood, medical emergency' },
-  { value: 'Crime', label: 'Crime/Safety', description: 'Theft, violence, suspicious activity' },
-  { value: 'Infrastructure', label: 'Infrastructure', description: 'Road damage, broken lights, etc.' },
-  { value: 'Health', label: 'Health Concern', description: 'Disease outbreak, sanitation' },
-  { value: 'Noise', label: 'Noise/Disturbance', description: 'Loud parties, construction' },
-  { value: 'Other', label: 'Other', description: 'Any other concern' }
+  { value: 'Emergency', label: 'Emergency', description: 'Sunog, baha, aksidente', icon: Flame, color: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-900/50' },
+  { value: 'Crime', label: 'Krimen', description: 'Nakawan, away', icon: Shield, color: 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-900/50' },
+  { value: 'Infrastructure', label: 'Imprastraktura', description: 'Sirang kalsada, ilaw', icon: Car, color: 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-900/50' },
+  { value: 'Health', label: 'Kalusugan', description: 'Sakit, sanitation', icon: HelpCircle, color: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-900/50' },
+  { value: 'Flood', label: 'Baha', description: 'Bumabahang lugar', icon: Droplets, color: 'text-cyan-600 bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-900/50' },
+  { value: 'Other', label: 'Iba Pa', description: 'Ibang problema', icon: Phone, color: 'text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700' }
 ];
 
 export default function Report() {
@@ -32,12 +31,12 @@ export default function Report() {
     e.preventDefault();
     
     if (!formData.report_type) {
-      toast.error('Please select a report type');
+      toast.error('Pumili ng uri ng report');
       return;
     }
     
     if (!formData.description.trim()) {
-      toast.error('Please provide a description');
+      toast.error('Ilagay ang detalye ng problema');
       return;
     }
 
@@ -49,103 +48,113 @@ export default function Report() {
         description: formData.description.trim(),
         location: formData.location.trim() || null
       });
-      toast.success('Report submitted successfully!');
+      toast.success('Matagumpay na naipadala ang report!');
       navigate('/my-reports');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to submit report');
+      toast.error(error.response?.data?.detail || 'Hindi naipadala ang report');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 md:pb-0" data-testid="report-page">
+    <div className="max-w-3xl mx-auto" data-testid="report-page">
       <Button 
         variant="ghost" 
-        className="mb-4 gap-2" 
+        className="mb-6 gap-2 text-lg h-14" 
         onClick={() => navigate(-1)}
       >
-        <ChevronLeft className="w-4 h-4" />
-        Back
+        <ChevronLeft className="w-6 h-6" />
+        Bumalik
       </Button>
 
-      <Card className="animate-slide-up shadow-lg">
-        <CardHeader className="text-center pb-2">
-          <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
+      <Card className="animate-slide-up shadow-xl">
+        <CardHeader className="text-center pb-4">
+          <div className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-10 h-10 text-red-600 dark:text-red-400" />
           </div>
-          <CardTitle className="text-2xl font-['Outfit']">Submit a Report</CardTitle>
-          <CardDescription>
-            Report an emergency or concern to barangay officials
+          <CardTitle className="text-3xl font-['Outfit']">Mag-report ng Problema</CardTitle>
+          <CardDescription className="text-lg">
+            I-report ang problema sa barangay officials
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="report_type">Report Type *</Label>
-              <Select 
-                value={formData.report_type}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, report_type: value }))}
-              >
-                <SelectTrigger className="h-12" data-testid="report-type-select">
-                  <SelectValue placeholder="Select type of report" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REPORT_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      <div>
-                        <p className="font-medium">{type.label}</p>
-                        <p className="text-xs text-muted-foreground">{type.description}</p>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Report Type Selection - Large Touch Targets */}
+            <div className="space-y-4">
+              <Label className="text-xl font-semibold">Ano ang problema? *</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {REPORT_TYPES.map((type) => {
+                  const Icon = type.icon;
+                  const isSelected = formData.report_type === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, report_type: type.value }))}
+                      className={`p-5 rounded-2xl border-2 transition-all text-left ${type.color} ${
+                        isSelected ? 'ring-4 ring-primary scale-[1.02]' : 'hover:scale-[1.02]'
+                      }`}
+                    >
+                      <Icon className="w-10 h-10 mb-3" />
+                      <p className="font-bold text-lg">{type.label}</p>
+                      <p className="text-sm opacity-80">{type.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Description *</Label>
+            {/* Description */}
+            <div className="space-y-3">
+              <Label htmlFor="description" className="text-xl font-semibold">
+                Ilarawan ang problema *
+              </Label>
               <Textarea
                 id="description"
-                placeholder="Please describe the incident or concern in detail..."
+                placeholder="Isulat dito ang buong detalye ng problema..."
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                className="min-h-[150px] resize-none"
+                className="min-h-[180px] resize-none text-lg p-4"
                 data-testid="report-description"
               />
-              <p className="text-xs text-muted-foreground">
-                Include as much detail as possible to help officials respond appropriately.
+              <p className="text-base text-muted-foreground">
+                Maglagay ng maraming detalye para mas mabilis na matulungan ka.
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="location" className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                Location (Optional)
+            {/* Location */}
+            <div className="space-y-3">
+              <Label htmlFor="location" className="text-xl font-semibold flex items-center gap-2">
+                <MapPin className="w-6 h-6" />
+                Saan ito nangyari? (Optional)
               </Label>
               <Input
                 id="location"
-                placeholder="e.g., Zone 3 near the basketball court"
+                placeholder="Hal: Zone 3 malapit sa basketball court"
                 value={formData.location}
                 onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                className="h-12"
+                className="h-16 text-lg px-5"
                 data-testid="report-location"
               />
             </div>
 
             <Button 
               type="submit" 
-              className="w-full h-12 rounded-full" 
+              className="w-full h-16 rounded-2xl text-xl font-semibold" 
               disabled={loading}
               data-testid="submit-report"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
+                  <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                  Ipinapadala...
                 </>
               ) : (
-                'Submit Report'
+                <>
+                  <AlertTriangle className="w-6 h-6 mr-3" />
+                  Ipadala ang Report
+                </>
               )}
             </Button>
           </form>

@@ -10,7 +10,7 @@ export default function Chatbot() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Magandang araw! I'm BarangayBot, your AI assistant for Brgy Korokan. How can I help you today?\n\nYou can ask me about:\n• Barangay office hours and services\n• How to submit emergency reports\n• Understanding alert types\n• General community information"
+      content: "Magandang araw! Ako si BarangayBot, ang iyong AI assistant para sa Brgy Korokan. Paano kita matutulungan?\n\nMaaari mo akong tanungin tungkol sa:\n• Oras ng barangay office\n• Paano mag-submit ng emergency report\n• Mga uri ng alerts\n• Mga serbisyo ng barangay"
     }
   ]);
   const [input, setInput] = useState('');
@@ -46,7 +46,7 @@ export default function Chatbot() {
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: "I'm sorry, I'm having trouble connecting right now. Please try again or contact the barangay office directly."
+        content: "Pasensya na, may problema sa koneksyon. Subukan ulit o tumawag sa barangay office."
       }]);
     } finally {
       setLoading(false);
@@ -55,76 +55,77 @@ export default function Chatbot() {
   };
 
   const quickQuestions = [
-    "What are the office hours?",
-    "How do I report an emergency?",
-    "What alert types are there?"
+    "Anong oras bukas ang office?",
+    "Paano mag-report ng emergency?",
+    "Ano ang mga uri ng alerts?",
+    "Saan ang barangay hall?"
   ];
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 md:pb-0" data-testid="chatbot-page">
-      <Card className="h-[calc(100vh-12rem)] md:h-[600px] flex flex-col shadow-lg animate-slide-up">
-        <CardHeader className="border-b flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-              <Bot className="w-5 h-5 text-primary-foreground" />
+    <div className="max-w-3xl mx-auto" data-testid="chatbot-page">
+      <Card className="h-[calc(100vh-10rem)] flex flex-col shadow-xl animate-slide-up">
+        <CardHeader className="border-b flex-shrink-0 py-6">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center">
+              <Bot className="w-7 h-7 text-primary-foreground" />
             </div>
             <div>
-              <CardTitle className="text-lg font-['Outfit']">BarangayBot</CardTitle>
-              <p className="text-sm text-muted-foreground">AI Assistant</p>
+              <CardTitle className="text-2xl font-['Outfit']">BarangayBot</CardTitle>
+              <p className="text-lg text-muted-foreground">AI Assistant - Handa akong tumulong!</p>
             </div>
           </div>
         </CardHeader>
 
-        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-          <div className="space-y-4">
+        <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+          <div className="space-y-6">
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {message.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-primary" />
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-6 h-6 text-primary" />
                   </div>
                 )}
                 <div
-                  className={`max-w-[80%] p-3 rounded-2xl ${
+                  className={`max-w-[80%] p-5 rounded-3xl ${
                     message.role === 'user'
                       ? 'bg-primary text-primary-foreground rounded-br-none'
                       : 'bg-muted rounded-bl-none'
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <p className="text-lg whitespace-pre-wrap leading-relaxed">{message.content}</p>
                 </div>
                 {message.role === 'user' && (
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-primary-foreground" />
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                    <User className="w-6 h-6 text-primary-foreground" />
                   </div>
                 )}
               </div>
             ))}
             {loading && (
-              <div className="flex gap-3 justify-start">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-primary" />
+              <div className="flex gap-4 justify-start">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Bot className="w-6 h-6 text-primary" />
                 </div>
-                <div className="bg-muted p-3 rounded-2xl rounded-bl-none">
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                <div className="bg-muted p-5 rounded-3xl rounded-bl-none">
+                  <Loader2 className="w-7 h-7 animate-spin" />
                 </div>
               </div>
             )}
           </div>
         </ScrollArea>
 
-        {/* Quick Questions */}
+        {/* Quick Questions - Senior Friendly Large Buttons */}
         {messages.length === 1 && (
-          <div className="px-4 pb-2 flex flex-wrap gap-2">
+          <div className="px-6 pb-4 flex flex-wrap gap-3">
             {quickQuestions.map((question, index) => (
               <Button
                 key={index}
                 variant="outline"
-                size="sm"
-                className="text-xs rounded-full"
+                size="lg"
+                className="text-base rounded-full h-12 px-5"
                 onClick={() => {
                   setInput(question);
                   inputRef.current?.focus();
@@ -136,25 +137,25 @@ export default function Chatbot() {
           </div>
         )}
 
-        <CardContent className="border-t p-4 flex-shrink-0">
-          <form onSubmit={sendMessage} className="flex gap-2">
+        <CardContent className="border-t p-6 flex-shrink-0">
+          <form onSubmit={sendMessage} className="flex gap-4">
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your message..."
-              className="h-12"
+              placeholder="I-type ang iyong tanong dito..."
+              className="h-16 text-lg px-6"
               disabled={loading}
               data-testid="chat-input"
             />
             <Button 
               type="submit" 
               size="icon" 
-              className="h-12 w-12 rounded-full" 
+              className="h-16 w-16 rounded-2xl" 
               disabled={loading || !input.trim()}
               data-testid="chat-send"
             >
-              <Send className="w-5 h-5" />
+              <Send className="w-7 h-7" />
             </Button>
           </form>
         </CardContent>
