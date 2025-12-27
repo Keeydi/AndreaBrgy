@@ -1,17 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import { chatbotAPI } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { ScrollArea } from '../components/ui/scroll-area';
-import { MessageSquare, Send, Bot, User, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Loader2 } from 'lucide-react';
 
 export default function Chatbot() {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: "Magandang araw! Ako si BarangayBot, ang iyong AI assistant para sa Brgy Korokan. Paano kita matutulungan?\n\nMaaari mo akong tanungin tungkol sa:\n• Oras ng barangay office\n• Paano mag-submit ng emergency report\n• Mga uri ng alerts\n• Mga serbisyo ng barangay"
-    }
+    { role: 'assistant', content: t('chatbotGreeting') }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,7 +26,6 @@ export default function Chatbot() {
 
   const sendMessage = async (e) => {
     e?.preventDefault();
-    
     if (!input.trim() || loading) return;
 
     const userMessage = input.trim();
@@ -36,100 +34,79 @@ export default function Chatbot() {
     setLoading(true);
 
     try {
-      const response = await chatbotAPI.query({
-        message: userMessage,
-        session_id: sessionId
-      });
-      
+      const response = await chatbotAPI.query({ message: userMessage, session_id: sessionId });
       setSessionId(response.data.session_id);
       setMessages(prev => [...prev, { role: 'assistant', content: response.data.response }]);
     } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: "Pasensya na, may problema sa koneksyon. Subukan ulit o tumawag sa barangay office."
-      }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, connection error. Please try again." }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
     }
   };
 
-  const quickQuestions = [
-    "Anong oras bukas ang office?",
-    "Paano mag-report ng emergency?",
-    "Ano ang mga uri ng alerts?",
-    "Saan ang barangay hall?"
-  ];
+  const quickQuestions = [t('officeHours'), t('howToReport'), t('alertTypes')];
 
   return (
-    <div className="max-w-3xl mx-auto" data-testid="chatbot-page">
-      <Card className="h-[calc(100vh-10rem)] flex flex-col shadow-xl animate-slide-up">
-        <CardHeader className="border-b flex-shrink-0 py-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center">
-              <Bot className="w-7 h-7 text-primary-foreground" />
+    <div className="max-w-xl mx-auto" data-testid="chatbot-page">
+      <Card className="h-[calc(100vh-8rem)] flex flex-col shadow-md animate-slide-up">
+        <CardHeader className="border-b py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
+              <Bot className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <CardTitle className="text-2xl font-['Outfit']">BarangayBot</CardTitle>
-              <p className="text-lg text-muted-foreground">AI Assistant - Handa akong tumulong!</p>
+              <CardTitle className="text-base font-['Outfit']">{t('barangayBot')}</CardTitle>
+              <p className="text-xs text-muted-foreground">{t('aiAssistant')}</p>
             </div>
           </div>
         </CardHeader>
 
-        <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-          <div className="space-y-6">
+        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          <div className="space-y-3">
             {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+              <div key={index} className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {message.role === 'assistant' && (
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-6 h-6 text-primary" />
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-4 h-4 text-primary" />
                   </div>
                 )}
-                <div
-                  className={`max-w-[80%] p-5 rounded-3xl ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground rounded-br-none'
-                      : 'bg-muted rounded-bl-none'
-                  }`}
-                >
-                  <p className="text-lg whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                  message.role === 'user'
+                    ? 'bg-primary text-primary-foreground rounded-br-none'
+                    : 'bg-muted rounded-bl-none'
+                }`}>
+                  <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
                 {message.role === 'user' && (
-                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                    <User className="w-6 h-6 text-primary-foreground" />
+                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                    <User className="w-4 h-4 text-primary-foreground" />
                   </div>
                 )}
               </div>
             ))}
             {loading && (
-              <div className="flex gap-4 justify-start">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-primary" />
+              <div className="flex gap-2 justify-start">
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-primary" />
                 </div>
-                <div className="bg-muted p-5 rounded-3xl rounded-bl-none">
-                  <Loader2 className="w-7 h-7 animate-spin" />
+                <div className="bg-muted p-3 rounded-2xl rounded-bl-none">
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 </div>
               </div>
             )}
           </div>
         </ScrollArea>
 
-        {/* Quick Questions - Senior Friendly Large Buttons */}
         {messages.length === 1 && (
-          <div className="px-6 pb-4 flex flex-wrap gap-3">
+          <div className="px-4 pb-2 flex flex-wrap gap-2">
             {quickQuestions.map((question, index) => (
               <Button
                 key={index}
                 variant="outline"
-                size="lg"
-                className="text-base rounded-full h-12 px-5"
-                onClick={() => {
-                  setInput(question);
-                  inputRef.current?.focus();
-                }}
+                size="sm"
+                className="text-xs rounded-full"
+                onClick={() => { setInput(question); inputRef.current?.focus(); }}
               >
                 {question}
               </Button>
@@ -137,25 +114,19 @@ export default function Chatbot() {
           </div>
         )}
 
-        <CardContent className="border-t p-6 flex-shrink-0">
-          <form onSubmit={sendMessage} className="flex gap-4">
+        <CardContent className="border-t p-3">
+          <form onSubmit={sendMessage} className="flex gap-2">
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="I-type ang iyong tanong dito..."
-              className="h-16 text-lg px-6"
+              placeholder={t('typeMessage')}
+              className="text-sm"
               disabled={loading}
               data-testid="chat-input"
             />
-            <Button 
-              type="submit" 
-              size="icon" 
-              className="h-16 w-16 rounded-2xl" 
-              disabled={loading || !input.trim()}
-              data-testid="chat-send"
-            >
-              <Send className="w-7 h-7" />
+            <Button type="submit" size="icon" disabled={loading || !input.trim()} data-testid="chat-send">
+              <Send className="w-4 h-4" />
             </Button>
           </form>
         </CardContent>

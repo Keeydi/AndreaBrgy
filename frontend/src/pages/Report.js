@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '../context/LanguageContext';
 import { reportsAPI } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -7,83 +8,63 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
-import { AlertTriangle, MapPin, Loader2, ChevronLeft, Phone, Flame, Droplets, Car, Shield, HelpCircle } from 'lucide-react';
-
-const REPORT_TYPES = [
-  { value: 'Emergency', label: 'Emergency', description: 'Sunog, baha, aksidente', icon: Flame, color: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-900/50' },
-  { value: 'Crime', label: 'Krimen', description: 'Nakawan, away', icon: Shield, color: 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-900/50' },
-  { value: 'Infrastructure', label: 'Imprastraktura', description: 'Sirang kalsada, ilaw', icon: Car, color: 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-900/50' },
-  { value: 'Health', label: 'Kalusugan', description: 'Sakit, sanitation', icon: HelpCircle, color: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-900/50' },
-  { value: 'Flood', label: 'Baha', description: 'Bumabahang lugar', icon: Droplets, color: 'text-cyan-600 bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-900/50' },
-  { value: 'Other', label: 'Iba Pa', description: 'Ibang problema', icon: Phone, color: 'text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700' }
-];
+import { AlertTriangle, MapPin, Loader2, ChevronLeft, Flame, Droplets, Car, Shield, HelpCircle, Phone } from 'lucide-react';
 
 export default function Report() {
-  const [formData, setFormData] = useState({
-    report_type: '',
-    description: '',
-    location: ''
-  });
+  const { t } = useLanguage();
+  const [formData, setFormData] = useState({ report_type: '', description: '', location: '' });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const REPORT_TYPES = [
+    { value: 'Emergency', label: t('emergency'), desc: t('emergencyDesc'), icon: Flame, color: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20' },
+    { value: 'Crime', label: t('crime'), desc: t('crimeDesc'), icon: Shield, color: 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20' },
+    { value: 'Infrastructure', label: t('infrastructure'), desc: t('infrastructureDesc'), icon: Car, color: 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/20' },
+    { value: 'Health', label: t('health'), desc: t('healthDesc'), icon: HelpCircle, color: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20' },
+    { value: 'Flood', label: t('flood'), desc: t('floodDesc'), icon: Droplets, color: 'text-cyan-600 bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20' },
+    { value: 'Other', label: t('other'), desc: t('otherDesc'), icon: Phone, color: 'text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800' }
+  ];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.report_type) {
-      toast.error('Pumili ng uri ng report');
-      return;
-    }
-    
-    if (!formData.description.trim()) {
-      toast.error('Ilagay ang detalye ng problema');
-      return;
-    }
+    if (!formData.report_type) { toast.error(t('selectType')); return; }
+    if (!formData.description.trim()) { toast.error(t('enterDescription')); return; }
 
     setLoading(true);
-
     try {
       await reportsAPI.create({
         report_type: formData.report_type,
         description: formData.description.trim(),
         location: formData.location.trim() || null
       });
-      toast.success('Matagumpay na naipadala ang report!');
+      toast.success(t('reportSuccess'));
       navigate('/my-reports');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Hindi naipadala ang report');
+      toast.error(error.response?.data?.detail || 'Failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto" data-testid="report-page">
-      <Button 
-        variant="ghost" 
-        className="mb-6 gap-2 text-lg h-14" 
-        onClick={() => navigate(-1)}
-      >
-        <ChevronLeft className="w-6 h-6" />
-        Bumalik
+    <div className="max-w-xl mx-auto" data-testid="report-page">
+      <Button variant="ghost" className="mb-4 gap-1 text-sm" onClick={() => navigate(-1)}>
+        <ChevronLeft className="w-4 h-4" />{t('back')}
       </Button>
 
-      <Card className="animate-slide-up shadow-xl">
-        <CardHeader className="text-center pb-4">
-          <div className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="w-10 h-10 text-red-600 dark:text-red-400" />
+      <Card className="animate-slide-up shadow-md">
+        <CardHeader className="text-center pb-3">
+          <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-2">
+            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
           </div>
-          <CardTitle className="text-3xl font-['Outfit']">Mag-report ng Problema</CardTitle>
-          <CardDescription className="text-lg">
-            I-report ang problema sa barangay officials
-          </CardDescription>
+          <CardTitle className="text-lg font-['Outfit']">{t('submitReport')}</CardTitle>
+          <CardDescription className="text-sm">{t('reportProblem')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Report Type Selection - Large Touch Targets */}
-            <div className="space-y-4">
-              <Label className="text-xl font-semibold">Ano ang problema? *</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t('whatProblem')} *</Label>
+              <div className="grid grid-cols-3 gap-2">
                 {REPORT_TYPES.map((type) => {
                   const Icon = type.icon;
                   const isSelected = formData.report_type === type.value;
@@ -92,70 +73,45 @@ export default function Report() {
                       key={type.value}
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, report_type: type.value }))}
-                      className={`p-5 rounded-2xl border-2 transition-all text-left ${type.color} ${
-                        isSelected ? 'ring-4 ring-primary scale-[1.02]' : 'hover:scale-[1.02]'
-                      }`}
+                      className={`p-3 rounded-lg border transition-all text-left ${type.color} ${isSelected ? 'ring-2 ring-primary' : ''}`}
                     >
-                      <Icon className="w-10 h-10 mb-3" />
-                      <p className="font-bold text-lg">{type.label}</p>
-                      <p className="text-sm opacity-80">{type.description}</p>
+                      <Icon className="w-5 h-5 mb-1" />
+                      <p className="font-medium text-xs">{type.label}</p>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Description */}
-            <div className="space-y-3">
-              <Label htmlFor="description" className="text-xl font-semibold">
-                Ilarawan ang problema *
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-sm font-medium">{t('describeProblem')} *</Label>
               <Textarea
                 id="description"
-                placeholder="Isulat dito ang buong detalye ng problema..."
+                placeholder={t('writeDetails')}
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                className="min-h-[180px] resize-none text-lg p-4"
+                className="min-h-[100px] resize-none text-sm"
                 data-testid="report-description"
               />
-              <p className="text-base text-muted-foreground">
-                Maglagay ng maraming detalye para mas mabilis na matulungan ka.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('addDetails')}</p>
             </div>
 
-            {/* Location */}
-            <div className="space-y-3">
-              <Label htmlFor="location" className="text-xl font-semibold flex items-center gap-2">
-                <MapPin className="w-6 h-6" />
-                Saan ito nangyari? (Optional)
+            <div className="space-y-2">
+              <Label htmlFor="location" className="text-sm font-medium flex items-center gap-1">
+                <MapPin className="w-4 h-4" />{t('whereHappened')}
               </Label>
               <Input
                 id="location"
-                placeholder="Hal: Zone 3 malapit sa basketball court"
+                placeholder={t('locationExample')}
                 value={formData.location}
                 onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                className="h-16 text-lg px-5"
+                className="text-sm"
                 data-testid="report-location"
               />
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-16 rounded-2xl text-xl font-semibold" 
-              disabled={loading}
-              data-testid="submit-report"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-6 h-6 mr-3 animate-spin" />
-                  Ipinapadala...
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="w-6 h-6 mr-3" />
-                  Ipadala ang Report
-                </>
-              )}
+            <Button type="submit" className="w-full" disabled={loading} data-testid="submit-report">
+              {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('sending')}</> : t('sendReport')}
             </Button>
           </form>
         </CardContent>

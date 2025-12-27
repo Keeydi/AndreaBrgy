@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { Layout } from './components/Layout';
 
 // Pages
@@ -19,8 +20,8 @@ import CreateAlert from './pages/CreateAlert';
 import UserManagement from './pages/UserManagement';
 import SystemLogs from './pages/SystemLogs';
 import Analytics from './pages/Analytics';
+import Settings from './pages/Settings';
 
-// Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading, isAuthenticated } = useAuth();
 
@@ -43,7 +44,6 @@ function ProtectedRoute({ children, allowedRoles }) {
   return <Layout>{children}</Layout>;
 }
 
-// Public Route Component (redirect if authenticated)
 function PublicRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
@@ -65,100 +65,25 @@ function PublicRoute({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public Routes */}
       <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
 
-      {/* Protected Routes - All Users */}
-      <Route 
-        path="/dashboard" 
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/alerts" 
-        element={
-          <ProtectedRoute>
-            <Alerts />
-          </ProtectedRoute>
-        } 
-      />
+      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
-      {/* Resident Routes */}
-      <Route 
-        path="/report" 
-        element={
-          <ProtectedRoute>
-            <Report />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/my-reports" 
-        element={
-          <ProtectedRoute>
-            <MyReports />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/chatbot" 
-        element={
-          <ProtectedRoute>
-            <Chatbot />
-          </ProtectedRoute>
-        } 
-      />
+      <Route path="/report" element={<ProtectedRoute><Report /></ProtectedRoute>} />
+      <Route path="/my-reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
+      <Route path="/chatbot" element={<ProtectedRoute><Chatbot /></ProtectedRoute>} />
 
-      {/* Official & Admin Routes */}
-      <Route 
-        path="/manage-reports" 
-        element={
-          <ProtectedRoute allowedRoles={['official', 'admin']}>
-            <ManageReports />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/create-alert" 
-        element={
-          <ProtectedRoute allowedRoles={['official', 'admin']}>
-            <CreateAlert />
-          </ProtectedRoute>
-        } 
-      />
+      <Route path="/manage-reports" element={<ProtectedRoute allowedRoles={['official', 'admin']}><ManageReports /></ProtectedRoute>} />
+      <Route path="/create-alert" element={<ProtectedRoute allowedRoles={['official', 'admin']}><CreateAlert /></ProtectedRoute>} />
 
-      {/* Admin Only Routes */}
-      <Route 
-        path="/analytics" 
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <Analytics />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/users" 
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <UserManagement />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/logs" 
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <SystemLogs />
-          </ProtectedRoute>
-        } 
-      />
+      <Route path="/analytics" element={<ProtectedRoute allowedRoles={['admin']}><Analytics /></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
+      <Route path="/logs" element={<ProtectedRoute allowedRoles={['admin']}><SystemLogs /></ProtectedRoute>} />
 
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -167,19 +92,14 @@ function AppRoutes() {
 function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-          <Toaster 
-            position="top-center" 
-            richColors 
-            closeButton
-            toastOptions={{
-              className: 'font-sans',
-            }}
-          />
-        </BrowserRouter>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+            <Toaster position="top-center" richColors closeButton />
+          </BrowserRouter>
+        </AuthProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }
