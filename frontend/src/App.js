@@ -18,6 +18,7 @@ import ManageReports from './pages/ManageReports';
 import CreateAlert from './pages/CreateAlert';
 import UserManagement from './pages/UserManagement';
 import SystemLogs from './pages/SystemLogs';
+import Analytics from './pages/Analytics';
 
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
@@ -132,6 +133,14 @@ function AppRoutes() {
       />
 
       {/* Admin Only Routes */}
+      <Route 
+        path="/analytics" 
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <Analytics />
+          </ProtectedRoute>
+        } 
+      />
       <Route 
         path="/users" 
         element={
