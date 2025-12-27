@@ -1,0 +1,143 @@
+{
+  "project_name": "BarangayAlert",
+  "design_philosophy": {
+    "persona": "E1: The Anti-AI Designer",
+    "core_concept": "Barangay Modern - A lifeline, not just a dashboard.",
+    "vibe": "Authoritative yet Community-Centric. High-contrast for emergencies, calming for administration.",
+    "principles": [
+      "Signal over Noise: Color is semantic. Red means danger, nothing else.",
+      "Thumb-First: Critical actions (SOS, Report) must be reachable with one hand.",
+      "Data Density vs. Clarity: Residents get clarity (big cards), Officials get density (grids).",
+      "Local Context: Use imagery and language that feels like home (The Philippines)."
+    ]
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Outfit, sans-serif",
+      "body": "Public Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl md:text-6xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold",
+      "body_large": "text-lg leading-relaxed",
+      "body_default": "text-base leading-relaxed",
+      "caption": "text-sm text-muted-foreground uppercase tracking-wider"
+    },
+    "instructions": "Import 'Outfit' and 'Public Sans' from Google Fonts in index.css. Use Outfit for all headings to give a modern, geometric feel. Use Public Sans for body text for maximum legibility."
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Slate Blue",
+        "light": "hsl(222, 47%, 11%)",
+        "dark": "hsl(210, 40%, 98%)",
+        "usage": "Brand identity, primary buttons, headers."
+      },
+      "critical": {
+        "name": "Signal Red",
+        "value": "#DC2626",
+        "usage": "Active Emergencies, SOS buttons, Critical Alerts ONLY."
+      },
+      "warning": {
+        "name": "Caution Amber",
+        "value": "#F59E0B",
+        "usage": "Weather warnings, medium priority alerts."
+      },
+      "safe": {
+        "name": "Resolution Emerald",
+        "value": "#10B981",
+        "usage": "All clear, success states, resolved reports."
+      },
+      "neutral": {
+        "name": "Slate",
+        "light_bg": "#F8FAFC",
+        "dark_bg": "#020617",
+        "usage": "Backgrounds, borders, secondary text."
+      }
+    },
+    "theme_strategy": "Auto-toggle. Light mode is 'Paper & Ink' (High legibility). Dark mode is 'Control Room' (Low eye strain, high signal contrast).",
+    "tailwind_config_extension": {
+      "colors": {
+        "brand": {
+          "DEFAULT": "hsl(222, 47%, 11%)",
+          "foreground": "hsl(210, 40%, 98%)"
+        },
+        "emergency": {
+          "DEFAULT": "#DC2626",
+          "foreground": "#FFFFFF"
+        }
+      }
+    }
+  },
+  "layout_system": {
+    "spacing": "Generous. Use p-6 or p-8 for cards. Gap-6 for grids.",
+    "grid_modes": {
+      "resident_feed": "Single column (max-w-md mx-auto) for mobile focus. Big, touchable cards.",
+      "official_dashboard": "Bento Grid (Mode B). Dense data. Map takes 2x2 span. Recent reports take 1x2 span.",
+      "landing_page": "Asymmetric 'Tetris' grid. Hero text left, Hero image right (overlapping)."
+    },
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+  },
+  "components": {
+    "buttons": {
+      "style": "Pill-shaped for primary actions. Sharp rectangles for filters/secondary.",
+      "sos_button": "Fixed position (bottom-right) or centered on mobile hero. Pulse animation. Red background."
+    },
+    "cards": {
+      "style": "Flat with 1px border. No shadow in dark mode. Soft shadow-lg in light mode.",
+      "alert_card": "Must have a colored left-border strip indicating severity (Red/Orange/Green)."
+    },
+    "inputs": {
+      "style": "Shadcn default but with h-12 for better touch targets."
+    },
+    "navigation": {
+      "mobile": "Bottom Tab Bar (Fixed). Icons only with active state labels.",
+      "desktop": "Top Sticky Header. Glassmorphism effect (backdrop-blur-md)."
+    }
+  },
+  "visual_assets": {
+    "images": {
+      "hero_bg": {
+        "url": "https://images.unsplash.com/photo-1742578754019-d9c352bae2d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxlbWVyZ2VuY3klMjByZXNwb25zZSUyMHRlYW0lMjBwaGlsaXBwaW5lc3xlbnwwfHx8fDE3NjY4NDg5MDV8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Classic Philippine Jeepney in City",
+        "usage": "Landing page hero background or side image."
+      },
+      "emergency_context": {
+        "url": "https://images.unsplash.com/photo-1737430566442-cfc9a90f3d34?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwzfHxlbWVyZ2VuY3klMjByZXNwb25zZSUyMHRlYW0lMjBwaGlsaXBwaW5lc3xlbnwwfHx8fDE3NjY4NDg5MDV8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Vehicle in flooded street",
+        "usage": "Emergency reporting section or 'About' section context."
+      },
+      "community_spirit": {
+        "url": "https://images.unsplash.com/photo-1568359852789-b3c8b7b98cc0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxmaWxpcGlubyUyMGNvbW11bml0eSUyMHN0cmVldCUyMHNtaWxpbmclMjBwZW9wbGV8ZW58MHx8fHwxNzY2ODQ4OTA0fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Smiling man beside motorcycle",
+        "usage": "Community/Resident dashboard header or profile placeholder."
+      },
+      "abstract_bg": {
+        "url": "https://images.unsplash.com/photo-1758979616462-8bdc7d854af3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwYWJzdHJhY3QlMjBnZW9tZXRyaWMlMjBzaGFwZXMlMjBibHVlJTIwcmVkfGVufDB8fHx8MTc2Njg0ODkwN3ww&ixlib=rb-4.1.0&q=85",
+        "alt": "Abstract Red Blue Geometry",
+        "usage": "Login page background or decorative elements."
+      }
+    },
+    "icons": "Use Lucide-React. Preferred icons: AlertTriangle, Megaphone, ShieldCheck, MapPin, Activity."
+  },
+  "motion": {
+    "micro_interactions": "Buttons scale down slightly on click (active:scale-95).",
+    "transitions": "Page transitions: Fade in + Slide up (y-4 to y-0).",
+    "emergency_pulse": "Keyframes: 0% scale-100 opacity-100, 100% scale-150 opacity-0. Use for SOS button."
+  },
+  "accessibility": {
+    "contrast": "Ensure text on Red/Blue backgrounds is White. Use APCA standards.",
+    "focus_states": "Visible ring-2 ring-offset-2 ring-brand-500 on all interactive elements.",
+    "aria": "Alerts must have role='alert'. Status updates role='status'."
+  },
+  "universal_guidelines": [
+    "Do not use gradients for text.",
+    "Avoid 'Inter' for headings. Use 'Outfit'.",
+    "Never use pure black (#000000). Use #020617.",
+    "All interactive elements must have data-testid attributes.",
+    "Use Shadcn components for complex interactions (Dialog, Select, Datepicker).",
+    "Create a 'Layout' component that handles the responsive container logic."
+  ]
+}
