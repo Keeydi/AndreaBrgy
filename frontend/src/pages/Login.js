@@ -24,115 +24,148 @@ export default function Login() {
 
     try {
       const user = await login(email, password);
-      toast.success(`Welcome back, ${user.name}!`);
+      toast.success(`Maligayang pagbabalik, ${user.name}!`);
       navigate('/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Invalid email or password');
+      toast.error(error.response?.data?.detail || 'Mali ang email o password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async (demoEmail, demoPassword) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setLoading(true);
+    try {
+      const user = await login(demoEmail, demoPassword);
+      toast.success(`Maligayang pagbabalik, ${user.name}!`);
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error('Hindi makapag-login');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center opacity-10"
-        style={{
-          backgroundImage: `url('https://images.unsplash.com/photo-1758979616462-8bdc7d854af3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwYWJzdHJhY3QlMjBnZW9tZXRyaWMlMjBzaGFwZXMlMjBibHVlJTIwcmVkfGVufDB8fHx8MTc2Njg0ODkwN3ww&ixlib=rb-4.1.0&q=85')`
-        }}
-      />
-      
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-muted/30">
       {/* Theme Toggle */}
       <Button
-        variant="ghost"
-        size="icon"
+        variant="outline"
+        size="lg"
         onClick={toggleTheme}
-        className="absolute top-4 right-4 rounded-full"
+        className="absolute top-4 right-4 rounded-full h-14 w-14"
       >
-        {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        {theme === 'dark' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
       </Button>
 
-      <Card className="w-full max-w-md relative animate-slide-up shadow-2xl">
-        <CardHeader className="text-center">
-          <Link to="/" className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
-              <Shield className="w-7 h-7 text-primary-foreground" />
+      <Card className="w-full max-w-lg relative animate-slide-up shadow-2xl">
+        <CardHeader className="text-center pb-6">
+          <Link to="/" className="flex items-center justify-center gap-3 mb-6">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
+              <Shield className="w-9 h-9 text-primary-foreground" />
             </div>
           </Link>
-          <CardTitle className="text-2xl font-['Outfit']">Welcome Back</CardTitle>
-          <CardDescription>Sign in to Brgy Korokan BarangayAlert</CardDescription>
+          <CardTitle className="text-3xl font-['Outfit']">Maligayang Pagbabalik!</CardTitle>
+          <CardDescription className="text-lg">Mag-login sa Brgy Korokan BarangayAlert</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-3">
+              <Label htmlFor="email" className="text-lg font-semibold">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="your@email.com"
+                placeholder="iyong@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-12"
+                className="h-16 text-lg px-5"
                 data-testid="login-email"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+            <div className="space-y-3">
+              <Label htmlFor="password" className="text-lg font-semibold">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
+                  placeholder="Ilagay ang password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-12 pr-10"
+                  className="h-16 text-lg px-5 pr-16"
                   data-testid="login-password"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-0 top-0 h-12 w-12"
+                  className="absolute right-2 top-2 h-12 w-12"
                   onClick={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
                 </Button>
               </div>
             </div>
             <Button 
               type="submit" 
-              className="w-full h-12 rounded-full" 
+              className="w-full h-16 rounded-2xl text-xl font-semibold" 
               disabled={loading}
               data-testid="login-submit"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Signing in...
+                  <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                  Naglo-login...
                 </>
               ) : (
-                'Sign In'
+                'Mag-login'
               )}
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-primary font-medium hover:underline" data-testid="register-link">
-              Register here
+          <div className="mt-8 text-center text-lg text-muted-foreground">
+            Wala ka pang account?{' '}
+            <Link to="/register" className="text-primary font-semibold hover:underline" data-testid="register-link">
+              Mag-register dito
             </Link>
           </div>
 
-          {/* Demo credentials */}
-          <div className="mt-6 p-4 bg-muted rounded-lg">
-            <p className="text-xs text-muted-foreground mb-2">Demo Accounts:</p>
-            <div className="space-y-1 text-xs">
-              <p><span className="font-medium">Admin:</span> admin@brgykorokan.gov.ph / admin123</p>
-              <p><span className="font-medium">Official:</span> official@brgykorokan.gov.ph / official123</p>
-              <p><span className="font-medium">Resident:</span> pedro@gmail.com / resident123</p>
+          {/* Demo credentials - Quick Login Buttons */}
+          <div className="mt-8 p-6 bg-muted rounded-2xl">
+            <p className="text-base text-muted-foreground mb-4 text-center font-semibold">
+              I-click para mabilis na mag-login:
+            </p>
+            <div className="space-y-3">
+              <Button
+                variant="outline"
+                className="w-full h-14 text-base justify-start gap-4"
+                onClick={() => handleDemoLogin('admin@brgykorokan.gov.ph', 'admin123')}
+                disabled={loading}
+              >
+                <span className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 font-bold">A</span>
+                <span>Admin (Kapitan)</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-14 text-base justify-start gap-4"
+                onClick={() => handleDemoLogin('official@brgykorokan.gov.ph', 'official123')}
+                disabled={loading}
+              >
+                <span className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 font-bold">O</span>
+                <span>Official (Kagawad)</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-14 text-base justify-start gap-4"
+                onClick={() => handleDemoLogin('pedro@gmail.com', 'resident123')}
+                disabled={loading}
+              >
+                <span className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 font-bold">R</span>
+                <span>Residente (Pedro)</span>
+              </Button>
             </div>
           </div>
         </CardContent>
