@@ -1,605 +1,644 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, desc, case
 from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
-import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
-import uuid
-from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from datetime import datetime, timedelta
+from typing import List, Optional
+import random
+import html
+from collections import defaultdict
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+from database import get_db, engine, Base
+from models import User, Alert, Report, SystemLog, UserRole, AlertStatus, ReportStatus
+from schemas import (
+    UserCreate, UserLogin, UserResponse, TokenResponse,
+    AlertCreate, AlertResponse,
+    ReportCreate, ReportResponse, ReportStatusUpdate,
+    UserRoleUpdate, ChatbotQuery, ChatbotResponse,
+    DashboardStats, SystemLogResponse
+)
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Load environment variables
+load_dotenv()
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'default-secret-key')
+JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-change-in-production')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
-# LLM Configuration
-EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
-
-# Security
-security = HTTPBearer()
-
-# Create the main app
-app = FastAPI(title="BarangayAlert API", version="1.0.0")
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Initialize FastAPI app
+app = FastAPI(
+    title="AndreaBrgy API",
+    version="1.0.0",
+    # Security headers
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
-logger = logging.getLogger(__name__)
 
-
-# ==================== MODELS ====================
-
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    address: Optional[str] = None
-    phone: Optional[str] = None
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-class UserResponse(BaseModel):
-    id: str
-    name: str
-    email: str
-    role: str
-    status: str
-    address: Optional[str] = None
-    phone: Optional[str] = None
-    created_at: str
-
-class UserUpdate(BaseModel):
-    role: Optional[str] = None
-    status: Optional[str] = None
-
-class AlertCreate(BaseModel):
-    title: str
-    message: str
-    type: str  # Emergency, Advisory, Announcement
-
-class AlertResponse(BaseModel):
-    id: str
-    title: str
-    message: str
-    type: str
-    created_by: str
-    created_by_name: str
-    created_at: str
-
-class ReportCreate(BaseModel):
-    report_type: str
-    description: str
-    location: Optional[str] = None
-
-class ReportResponse(BaseModel):
-    id: str
-    user_id: str
-    user_name: str
-    report_type: str
-    description: str
-    location: Optional[str] = None
-    status: str
-    official_response: Optional[str] = None
-    created_at: str
-    updated_at: Optional[str] = None
-
-class ReportStatusUpdate(BaseModel):
-    status: str
-    official_response: Optional[str] = None
-
-class ChatMessage(BaseModel):
-    message: str
-    session_id: Optional[str] = None
-
-class ChatResponse(BaseModel):
-    response: str
-    session_id: str
-
-class SystemLogResponse(BaseModel):
-    id: str
-    user_id: str
-    user_name: str
-    action: str
-    details: Optional[str] = None
-    timestamp: str
-
-
-# ==================== HELPERS ====================
-
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
-
-def create_token(user_id: str, role: str) -> str:
-    expiration = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
-    payload = {
-        "user_id": user_id,
-        "role": role,
-        "exp": expiration
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-def decode_token(token: str) -> dict:
-    try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    payload = decode_token(token)
-    user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    if user.get("status") != "active":
-        raise HTTPException(status_code=403, detail="Account is deactivated")
-    return user
-
-async def require_role(allowed_roles: List[str]):
-    async def role_checker(user: dict = Depends(get_current_user)):
-        if user["role"] not in allowed_roles:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-        return user
-    return role_checker
-
-async def log_action(user_id: str, user_name: str, action: str, details: str = None):
-    log_entry = {
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "user_name": user_name,
-        "action": action,
-        "details": details,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-    await db.system_logs.insert_one(log_entry)
-
-
-# ==================== AUTH ROUTES ====================
-
-@api_router.post("/auth/register", response_model=dict)
-async def register(user: UserCreate):
-    # Check if email exists
-    existing = await db.users.find_one({"email": user.email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    user_doc = {
-        "id": str(uuid.uuid4()),
-        "name": user.name,
-        "email": user.email,
-        "password": hash_password(user.password),
-        "role": "resident",  # Default role
-        "status": "active",
-        "address": user.address,
-        "phone": user.phone,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    await db.users.insert_one(user_doc)
-    await log_action(user_doc["id"], user_doc["name"], "USER_REGISTERED", f"New user registered: {user.email}")
-    
-    token = create_token(user_doc["id"], user_doc["role"])
-    return {
-        "message": "Registration successful",
-        "token": token,
-        "user": {
-            "id": user_doc["id"],
-            "name": user_doc["name"],
-            "email": user_doc["email"],
-            "role": user_doc["role"]
-        }
-    }
-
-@api_router.post("/auth/login", response_model=dict)
-async def login(credentials: UserLogin):
-    user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    if not verify_password(credentials.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    if user.get("status") != "active":
-        raise HTTPException(status_code=403, detail="Account is deactivated")
-    
-    await log_action(user["id"], user["name"], "USER_LOGIN", f"User logged in: {user['email']}")
-    
-    token = create_token(user["id"], user["role"])
-    return {
-        "message": "Login successful",
-        "token": token,
-        "user": {
-            "id": user["id"],
-            "name": user["name"],
-            "email": user["email"],
-            "role": user["role"]
-        }
-    }
-
-@api_router.get("/auth/me", response_model=UserResponse)
-async def get_me(user: dict = Depends(get_current_user)):
-    return UserResponse(
-        id=user["id"],
-        name=user["name"],
-        email=user["email"],
-        role=user["role"],
-        status=user["status"],
-        address=user.get("address"),
-        phone=user.get("phone"),
-        created_at=user["created_at"]
-    )
-
-
-# ==================== ALERTS ROUTES ====================
-
-@api_router.get("/alerts", response_model=List[AlertResponse])
-async def get_alerts(user: dict = Depends(get_current_user)):
-    alerts = await db.alerts.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    return [AlertResponse(**alert) for alert in alerts]
-
-@api_router.post("/alerts", response_model=AlertResponse)
-async def create_alert(alert: AlertCreate, user: dict = Depends(get_current_user)):
-    if user["role"] not in ["official", "admin"]:
-        raise HTTPException(status_code=403, detail="Only officials can create alerts")
-    
-    alert_doc = {
-        "id": str(uuid.uuid4()),
-        "title": alert.title,
-        "message": alert.message,
-        "type": alert.type,
-        "created_by": user["id"],
-        "created_by_name": user["name"],
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    await db.alerts.insert_one(alert_doc)
-    await log_action(user["id"], user["name"], "ALERT_CREATED", f"Alert created: {alert.title} ({alert.type})")
-    
-    return AlertResponse(**alert_doc)
-
-
-# ==================== REPORTS ROUTES ====================
-
-@api_router.get("/reports", response_model=List[ReportResponse])
-async def get_reports(user: dict = Depends(get_current_user)):
-    if user["role"] in ["official", "admin"]:
-        # Officials and admins see all reports
-        reports = await db.reports.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    else:
-        # Residents see only their own reports
-        reports = await db.reports.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    
-    return [ReportResponse(**report) for report in reports]
-
-@api_router.post("/reports", response_model=ReportResponse)
-async def create_report(report: ReportCreate, user: dict = Depends(get_current_user)):
-    report_doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "user_name": user["name"],
-        "report_type": report.report_type,
-        "description": report.description,
-        "location": report.location,
-        "status": "pending",
-        "official_response": None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": None
-    }
-    
-    await db.reports.insert_one(report_doc)
-    await log_action(user["id"], user["name"], "REPORT_SUBMITTED", f"Report submitted: {report.report_type}")
-    
-    return ReportResponse(**report_doc)
-
-@api_router.put("/reports/{report_id}/status", response_model=ReportResponse)
-async def update_report_status(report_id: str, update: ReportStatusUpdate, user: dict = Depends(get_current_user)):
-    if user["role"] not in ["official", "admin"]:
-        raise HTTPException(status_code=403, detail="Only officials can update report status")
-    
-    report = await db.reports.find_one({"id": report_id}, {"_id": 0})
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    
-    update_data = {
-        "status": update.status,
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    if update.official_response:
-        update_data["official_response"] = update.official_response
-    
-    await db.reports.update_one({"id": report_id}, {"$set": update_data})
-    await log_action(user["id"], user["name"], "REPORT_STATUS_UPDATED", f"Report {report_id} status updated to: {update.status}")
-    
-    updated_report = await db.reports.find_one({"id": report_id}, {"_id": 0})
-    return ReportResponse(**updated_report)
-
-
-# ==================== USERS ROUTES (ADMIN) ====================
-
-@api_router.get("/users", response_model=List[UserResponse])
-async def get_users(user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(500)
-    return [UserResponse(**u) for u in users]
-
-@api_router.put("/users/{user_id}/role", response_model=UserResponse)
-async def update_user_role(user_id: str, update: UserUpdate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    target_user = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    update_data = {}
-    if update.role:
-        update_data["role"] = update.role
-    if update.status:
-        update_data["status"] = update.status
-    
-    if update_data:
-        await db.users.update_one({"id": user_id}, {"$set": update_data})
-        await log_action(user["id"], user["name"], "USER_UPDATED", f"User {user_id} updated: {update_data}")
-    
-    updated_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
-    return UserResponse(**updated_user)
-
-
-# ==================== CHATBOT ROUTES ====================
-
-@api_router.post("/chatbot/query", response_model=ChatResponse)
-async def chatbot_query(message: ChatMessage, user: dict = Depends(get_current_user)):
-    session_id = message.session_id or str(uuid.uuid4())
-    
-    system_message = """You are BarangayBot, an AI assistant for Brgy Korokan's BarangayAlert system. 
-You help residents with:
-- Information about barangay services and office hours
-- Guidance on submitting emergency reports
-- Understanding alert types (Emergency, Advisory, Announcement)
-- General community information
-
-Be helpful, concise, and friendly. If you don't know something specific to the barangay, 
-suggest they contact the barangay office or submit a report through the system.
-
-Barangay Office Hours: Monday-Friday 8AM-5PM
-Emergency Hotline: Available 24/7 through the Emergency Report feature
-Location: Brgy Korokan Hall, Main Street"""
-
-    try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message=system_message
-        ).with_model("openai", "gpt-4o-mini")
-        
-        user_message = UserMessage(text=message.message)
-        response = await chat.send_message(user_message)
-        
-        await log_action(user["id"], user["name"], "CHATBOT_QUERY", f"User asked: {message.message[:100]}")
-        
-        return ChatResponse(response=response, session_id=session_id)
-    except Exception as e:
-        logger.error(f"Chatbot error: {e}")
-        # Fallback response
-        return ChatResponse(
-            response="I apologize, but I'm having trouble connecting right now. Please try again later or contact the barangay office directly for assistance.",
-            session_id=session_id
-        )
-
-
-# ==================== SYSTEM LOGS ROUTES ====================
-
-@api_router.get("/logs", response_model=List[SystemLogResponse])
-async def get_system_logs(user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    logs = await db.system_logs.find({}, {"_id": 0}).sort("timestamp", -1).to_list(500)
-    return [SystemLogResponse(**log) for log in logs]
-
-
-# ==================== DASHBOARD STATS ====================
-
-@api_router.get("/stats/dashboard")
-async def get_dashboard_stats(user: dict = Depends(get_current_user)):
-    if user["role"] not in ["official", "admin"]:
-        raise HTTPException(status_code=403, detail="Officials only")
-    
-    total_users = await db.users.count_documents({})
-    total_alerts = await db.alerts.count_documents({})
-    total_reports = await db.reports.count_documents({})
-    pending_reports = await db.reports.count_documents({"status": "pending"})
-    resolved_reports = await db.reports.count_documents({"status": "resolved"})
-    
-    # Get recent reports
-    recent_reports = await db.reports.find({}, {"_id": 0}).sort("created_at", -1).to_list(5)
-    
-    # Get report counts by type
-    report_types = await db.reports.aggregate([
-        {"$group": {"_id": "$report_type", "count": {"$sum": 1}}}
-    ]).to_list(10)
-    
-    return {
-        "total_users": total_users,
-        "total_alerts": total_alerts,
-        "total_reports": total_reports,
-        "pending_reports": pending_reports,
-        "resolved_reports": resolved_reports,
-        "recent_reports": recent_reports,
-        "report_types": {r["_id"]: r["count"] for r in report_types}
-    }
-
-
-# ==================== SEED DATA ====================
-
-@api_router.post("/seed")
-async def seed_data():
-    """Seed initial data for demo purposes"""
-    # Check if already seeded
-    existing_admin = await db.users.find_one({"email": "admin@brgykorokan.gov.ph"})
-    if existing_admin:
-        return {"message": "Data already seeded"}
-    
-    # Create admin user
-    admin = {
-        "id": str(uuid.uuid4()),
-        "name": "Kapitan Juan dela Cruz",
-        "email": "admin@brgykorokan.gov.ph",
-        "password": hash_password("admin123"),
-        "role": "admin",
-        "status": "active",
-        "address": "Brgy Korokan, Main Street",
-        "phone": "09171234567",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(admin)
-    
-    # Create official user
-    official = {
-        "id": str(uuid.uuid4()),
-        "name": "Maria Santos",
-        "email": "official@brgykorokan.gov.ph",
-        "password": hash_password("official123"),
-        "role": "official",
-        "status": "active",
-        "address": "Brgy Korokan, Zone 1",
-        "phone": "09181234567",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(official)
-    
-    # Create sample resident
-    resident = {
-        "id": str(uuid.uuid4()),
-        "name": "Pedro Reyes",
-        "email": "pedro@gmail.com",
-        "password": hash_password("resident123"),
-        "role": "resident",
-        "status": "active",
-        "address": "Brgy Korokan, Zone 3",
-        "phone": "09191234567",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(resident)
-    
-    # Create sample alerts
-    alerts = [
-        {
-            "id": str(uuid.uuid4()),
-            "title": "Typhoon Warning",
-            "message": "Typhoon signal #2 has been raised. All residents are advised to stay indoors and prepare emergency supplies.",
-            "type": "Emergency",
-            "created_by": official["id"],
-            "created_by_name": official["name"],
-            "created_at": datetime.now(timezone.utc).isoformat()
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "title": "Road Repair Notice",
-            "message": "Main Street will undergo repairs from December 20-25. Please use alternative routes.",
-            "type": "Advisory",
-            "created_by": official["id"],
-            "created_by_name": official["name"],
-            "created_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "title": "Barangay Christmas Party",
-            "message": "Join us for the annual Barangay Christmas Party on December 23 at the covered court. Everyone is welcome!",
-            "type": "Announcement",
-            "created_by": admin["id"],
-            "created_by_name": admin["name"],
-            "created_at": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
-        }
-    ]
-    await db.alerts.insert_many(alerts)
-    
-    # Create sample reports
-    reports = [
-        {
-            "id": str(uuid.uuid4()),
-            "user_id": resident["id"],
-            "user_name": resident["name"],
-            "report_type": "Infrastructure",
-            "description": "Street light not working on Zone 3 corner",
-            "location": "Zone 3, Near Sari-sari Store",
-            "status": "pending",
-            "official_response": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": None
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "user_id": resident["id"],
-            "user_name": resident["name"],
-            "report_type": "Emergency",
-            "description": "Flooded area near the bridge",
-            "location": "Brgy Korokan Bridge",
-            "status": "in_progress",
-            "official_response": "Response team has been dispatched",
-            "created_at": (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat(),
-            "updated_at": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
-        }
-    ]
-    await db.reports.insert_many(reports)
-    
-    return {
-        "message": "Data seeded successfully",
-        "users": {
-            "admin": {"email": "admin@brgykorokan.gov.ph", "password": "admin123"},
-            "official": {"email": "official@brgykorokan.gov.ph", "password": "official123"},
-            "resident": {"email": "pedro@gmail.com", "password": "resident123"}
-        }
-    }
-
-
-# ==================== ROOT ====================
-
-@api_router.get("/")
-async def root():
-    return {"message": "BarangayAlert API v1.0", "status": "running"}
-
-
-# Include the router
-app.include_router(api_router)
+# Request size limit (10MB)
+MAX_REQUEST_SIZE = 10 * 1024 * 1024
 
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001"
+    ],
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    expose_headers=["Content-Type"],
+    max_age=3600,
 )
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# Rate limiting storage (in production, use Redis)
+login_attempts = defaultdict(list)
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+# Security
+security = HTTPBearer()
+
+# Helper Functions
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+def create_access_token(user_id: int, email: str, role: str) -> str:
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "role": role,
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id: int = int(payload.get("sub"))
+    except (jwt.PyJWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    return user
+
+def require_role(allowed_roles: List[UserRole]):
+    def role_checker(current_user: User = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        return current_user
+    return role_checker
+
+def create_system_log(db: Session, action: str, user_id: Optional[int], details: str):
+    """Helper function to create system log entries."""
+    log = SystemLog(action=action, user_id=user_id, details=details)
+    db.add(log)
+    return log
+
+def add_creator_name(response_dict: dict, creator_name: str):
+    """Helper function to add creator name to response dict."""
+    response_dict['created_by_name'] = creator_name
+    return response_dict
+
+def sanitize_input(text: str, max_length: Optional[int] = None) -> str:
+    """Sanitize user input to prevent XSS attacks."""
+    if not text:
+        return text
+    # Escape HTML characters
+    sanitized = html.escape(text)
+    # Remove any remaining script tags
+    import re
+    sanitized = re.sub(r'<script[^>]*>.*?</script>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+    if max_length:
+        sanitized = sanitized[:max_length]
+    return sanitized
+
+def check_rate_limit(identifier: str) -> bool:
+    """Check if rate limit is exceeded for login attempts."""
+    now = datetime.utcnow()
+    # Clean old attempts
+    login_attempts[identifier] = [
+        attempt for attempt in login_attempts[identifier]
+        if (now - attempt).total_seconds() < LOGIN_WINDOW_SECONDS
+    ]
+    # Check if limit exceeded
+    if len(login_attempts[identifier]) >= MAX_LOGIN_ATTEMPTS:
+        return False
+    return True
+
+def record_login_attempt(identifier: str):
+    """Record a login attempt."""
+    login_attempts[identifier].append(datetime.utcnow())
+
+# Auth Routes
+@app.post("/api/auth/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    # Rate limiting check
+    email_lower = user_data.email.lower()
+    if not check_rate_limit(f"register_{email_lower}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts. Please try again later."
+        )
+    
+    # Check if email already exists (case-insensitive)
+    # MySQL is case-insensitive by default, but we normalize to lowercase
+    existing_user = db.query(User).filter(User.email == email_lower).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Sanitize user input
+    sanitized_name = sanitize_input(user_data.name, max_length=255)
+    sanitized_phone = sanitize_input(user_data.phone, max_length=20) if user_data.phone else None
+    sanitized_address = sanitize_input(user_data.address, max_length=500) if user_data.address else None
+    
+    # Create new user
+    hashed_password = hash_password(user_data.password)
+    new_user = User(
+        email=email_lower,
+        password_hash=hashed_password,
+        name=sanitized_name,
+        role=user_data.role,
+        phone=sanitized_phone,
+        address=sanitized_address
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    # Create token
+    token = create_access_token(new_user.id, new_user.email, new_user.role.value)
+    
+    # Log action
+    create_system_log(db, "user_register", new_user.id, f"User {new_user.email} registered")
+    db.commit()
+    
+    return TokenResponse(
+        token=token,
+        user=UserResponse.model_validate(new_user)
+    )
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    # Rate limiting check
+    email_lower = credentials.email.lower()
+    if not check_rate_limit(email_lower):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later."
+        )
+    
+    # Case-insensitive email lookup (MySQL is case-insensitive by default)
+    # We normalize to lowercase for consistency
+    user = db.query(User).filter(func.lower(User.email) == email_lower).first()
+    
+    if not user:
+        record_login_attempt(email_lower)
+        print(f"Login attempt failed: User not found for email: {email_lower}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    if not verify_password(credentials.password, user.password_hash):
+        record_login_attempt(email_lower)
+        print(f"Login attempt failed: Invalid password for email: {email_lower}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    # Clear attempts on successful login
+    if email_lower in login_attempts:
+        del login_attempts[email_lower]
+    
+    # Create token
+    token = create_access_token(user.id, user.email, user.role.value)
+    
+    # Log action (async logging - don't block login response)
+    try:
+        create_system_log(db, "user_login", user.id, f"User {user.email} logged in")
+        db.commit()
+    except Exception:
+        # Don't fail login if logging fails
+        db.rollback()
+        pass
+    
+    return TokenResponse(
+        token=token,
+        user=UserResponse.model_validate(user)
+    )
+
+@app.get("/api/auth/me", response_model=UserResponse)
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return UserResponse.model_validate(current_user)
+
+# Alert Routes
+@app.get("/api/alerts", response_model=List[AlertResponse])
+def get_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Use eager loading to avoid N+1 queries
+    alerts = db.query(Alert).options(joinedload(Alert.creator)).order_by(desc(Alert.created_at)).all()
+    return [add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name) 
+            for alert in alerts]
+
+@app.post("/api/alerts", response_model=AlertResponse, status_code=status.HTTP_201_CREATED)
+def create_alert(
+    alert_data: AlertCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.OFFICIAL]))
+):
+    # Sanitize input
+    sanitized_title = sanitize_input(alert_data.title, max_length=255)
+    sanitized_message = sanitize_input(alert_data.message, max_length=5000)
+    
+    new_alert = Alert(
+        type=alert_data.type,
+        title=sanitized_title,
+        message=sanitized_message,
+        priority=alert_data.priority,
+        created_by=current_user.id
+    )
+    
+    db.add(new_alert)
+    
+    # Log action (batch with alert creation)
+    create_system_log(db, "alert_create", current_user.id, f"Created alert: {new_alert.title}")
+    db.commit()  # Single commit for both operations
+    db.refresh(new_alert)
+    
+    return add_creator_name(AlertResponse.model_validate(new_alert).model_dump(), current_user.name)
+
+@app.put("/api/alerts/{alert_id}", response_model=AlertResponse)
+def update_alert(
+    alert_id: int,
+    alert_data: AlertCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.OFFICIAL]))
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found"
+        )
+    
+    # Sanitize input
+    alert.title = sanitize_input(alert_data.title, max_length=255)
+    alert.message = sanitize_input(alert_data.message, max_length=5000)
+    alert.type = alert_data.type
+    alert.priority = alert_data.priority
+    
+    create_system_log(db, "alert_update", current_user.id, f"Updated alert {alert_id}")
+    db.commit()
+    db.refresh(alert)
+    
+    return add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name)
+
+@app.delete("/api/alerts/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.OFFICIAL]))
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found"
+        )
+    
+    create_system_log(db, "alert_delete", current_user.id, f"Deleted alert {alert_id}")
+    db.delete(alert)
+    db.commit()
+    return None
+
+# Report Routes
+@app.get("/api/reports", response_model=List[ReportResponse])
+def get_reports(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Use eager loading to avoid N+1 queries
+    query = db.query(Report).options(joinedload(Report.creator))
+    
+    # Residents can only see their own reports
+    if current_user.role == UserRole.RESIDENT:
+        reports = query.filter(Report.created_by == current_user.id).order_by(desc(Report.created_at)).all()
+    else:
+        reports = query.order_by(desc(Report.created_at)).all()
+    
+    return [add_creator_name(ReportResponse.model_validate(report).model_dump(), report.creator.name) 
+            for report in reports]
+
+@app.post("/api/reports", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
+def create_report(
+    report_data: ReportCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Sanitize input
+    sanitized_title = sanitize_input(report_data.title, max_length=255)
+    sanitized_description = sanitize_input(report_data.description, max_length=5000)
+    sanitized_location = sanitize_input(report_data.location, max_length=500) if report_data.location else None
+    
+    new_report = Report(
+        type=report_data.type,
+        title=sanitized_title,
+        description=sanitized_description,
+        location=sanitized_location,
+        created_by=current_user.id
+    )
+    
+    db.add(new_report)
+    
+    # Log action (batch with report creation)
+    create_system_log(db, "report_create", current_user.id, f"Created report: {new_report.title}")
+    db.commit()  # Single commit for both operations
+    db.refresh(new_report)
+    
+    return add_creator_name(ReportResponse.model_validate(new_report).model_dump(), current_user.name)
+
+@app.put("/api/reports/{report_id}/status", response_model=ReportResponse)
+def update_report_status(
+    report_id: int,
+    status_data: ReportStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.OFFICIAL]))
+):
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Report not found"
+        )
+    
+    report.status = status_data.status
+    if status_data.status == ReportStatus.RESOLVED:
+        report.resolved_at = datetime.utcnow()
+    
+    # Log action (batch with status update)
+    create_system_log(db, "report_status_update", current_user.id, 
+                     f"Updated report {report_id} status to {status_data.status.value}")
+    db.commit()  # Single commit for both operations
+    db.refresh(report)
+    
+    return add_creator_name(ReportResponse.model_validate(report).model_dump(), report.creator.name)
+
+@app.delete("/api/reports/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.OFFICIAL]))
+):
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Report not found"
+        )
+    
+    # Residents can only delete their own reports
+    if current_user.role == UserRole.RESIDENT and report.created_by != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own reports"
+        )
+    
+    create_system_log(db, "report_delete", current_user.id, f"Deleted report {report_id}")
+    db.delete(report)
+    db.commit()
+    return None
+
+# User Management Routes (Admin only)
+@app.get("/api/users", response_model=List[UserResponse])
+def get_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    users = db.query(User).all()
+    return [UserResponse.model_validate(user) for user in users]
+
+@app.put("/api/users/{user_id}/role", response_model=UserResponse)
+def update_user_role(
+    user_id: int,
+    role_data: UserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    user.role = role_data.role
+    
+    # Log action (batch with role update)
+    create_system_log(db, "user_role_update", current_user.id, 
+                     f"Updated user {user_id} role to {role_data.role.value}")
+    db.commit()  # Single commit for both operations
+    db.refresh(user)
+    
+    return UserResponse.model_validate(user)
+
+# Chatbot Route
+@app.post("/api/chatbot/query", response_model=ChatbotResponse)
+def chatbot_query(
+    query: ChatbotQuery,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Simple mock response - you can integrate with AI services here
+    responses = [
+        "I'm here to help you with barangay-related questions. How can I assist you today?",
+        "You can submit reports, view alerts, and access various barangay services through this platform.",
+        "For emergencies, please contact the barangay hotline or visit the barangay hall.",
+        "I can help you with information about barangay services, report submission, and general inquiries.",
+    ]
+    
+    response_text = random.choice(responses)
+    
+    # Sanitize and log action
+    sanitized_message = sanitize_input(query.message, max_length=50)
+    create_system_log(db, "chatbot_query", current_user.id, f"Chatbot query: {sanitized_message}")
+    db.commit()
+    
+    return ChatbotResponse(
+        response=response_text,
+        session_id=query.session_id or f"session_{datetime.utcnow().timestamp()}"
+    )
+
+# Dashboard Stats Route - Optimized with single query
+@app.get("/api/stats/dashboard", response_model=DashboardStats)
+def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.OFFICIAL]))
+):
+    # Optimized: Get all stats in fewer queries using CASE statements
+    # Single query for report stats
+    report_stats = db.query(
+        func.count(Report.id).label('total'),
+        func.sum(case((Report.status == ReportStatus.PENDING, 1), else_=0)).label('pending'),
+        func.sum(case((Report.status == ReportStatus.RESOLVED, 1), else_=0)).label('resolved')
+    ).first()
+    
+    # Single query for alert stats
+    active_alerts = db.query(func.count(Alert.id)).filter(Alert.status == AlertStatus.ACTIVE).scalar() or 0
+    
+    # Single query for user stats
+    user_stats = db.query(
+        func.count(User.id).label('total'),
+        func.sum(case((User.role == UserRole.RESIDENT, 1), else_=0)).label('residents'),
+        func.sum(case((User.role == UserRole.OFFICIAL, 1), else_=0)).label('officials')
+    ).first()
+    
+    return DashboardStats(
+        total_reports=report_stats.total or 0,
+        pending_reports=int(report_stats.pending or 0),
+        resolved_reports=int(report_stats.resolved or 0),
+        active_alerts=active_alerts,
+        total_users=user_stats.total or 0,
+        residents=int(user_stats.residents or 0),
+        officials=int(user_stats.officials or 0)
+    )
+
+# System Logs Route
+@app.get("/api/logs", response_model=List[SystemLogResponse])
+def get_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    try:
+        # Get logs ordered by timestamp
+        logs = db.query(SystemLog).order_by(desc(SystemLog.timestamp)).limit(100).all()
+        
+        # Get all user IDs that exist in logs
+        user_ids = [log.user_id for log in logs if log.user_id]
+        
+        # Load all users in one query if there are any
+        users_dict = {}
+        if user_ids:
+            users = db.query(User).filter(User.id.in_(user_ids)).all()
+            users_dict = {user.id: user.name for user in users}
+        
+        # Build response
+        result = []
+        for log in logs:
+            # Manually construct the response dict to avoid Pydantic validation issues
+            # with the user relationship (which is a User object, not a string)
+            log_dict = {
+                'id': log.id,
+                'action': log.action,
+                'user': users_dict.get(log.user_id, "System") if log.user_id else "System",
+                'details': log.details,
+                'timestamp': log.timestamp
+            }
+            result.append(SystemLogResponse(**log_dict))
+        
+        return result
+    except Exception as e:
+        print(f"Error fetching logs: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching logs: {str(e)}"
+        )
+
+# Seed Data Route (for development)
+@app.post("/api/seed")
+def seed_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    # Create demo alerts
+    alert1 = Alert(
+        type="emergency",
+        title="Emergency Evacuation Notice",
+        message="All residents in Zone 3 are advised to evacuate immediately due to flooding.",
+        priority="high",
+        created_by=current_user.id
+    )
+    alert2 = Alert(
+        type="announcement",
+        title="Barangay Assembly Meeting",
+        message="Monthly barangay assembly meeting will be held on Saturday at 2 PM.",
+        priority="medium",
+        created_by=current_user.id
+    )
+    db.add(alert1)
+    db.add(alert2)
+    
+    # Create demo reports
+    resident = db.query(User).filter(User.role == UserRole.RESIDENT).first()
+    if resident:
+        report1 = Report(
+            type="complaint",
+            title="Garbage Collection Issue",
+            description="Garbage has not been collected in Zone 3 for the past week.",
+            location="Zone 3, near basketball court",
+            created_by=resident.id
+        )
+        report2 = Report(
+            type="request",
+            title="Request for Street Light",
+            description="Requesting installation of street light in Zone 5 for safety.",
+            location="Zone 5, main road",
+            status=ReportStatus.IN_PROGRESS,
+            created_by=resident.id
+        )
+        db.add(report1)
+        db.add(report2)
+    
+    db.commit()
+    
+    return {"message": "Demo data loaded successfully"}
+
+@app.get("/")
+def root():
+    return {"message": "AndreaBrgy API is running"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+

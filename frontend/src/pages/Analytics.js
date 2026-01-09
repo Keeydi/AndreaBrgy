@@ -123,7 +123,7 @@ export default function Analytics() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><FileText className="w-4 h-4" />{t('reportStatus')}</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-52">
+              <div className="h-52 min-h-[208px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={reportStatusData} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
@@ -138,7 +138,7 @@ export default function Analytics() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="w-4 h-4" />{t('reportTypes')}</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-52">
+              <div className="h-52 min-h-[208px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={reportTypeData}>
                     <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} />
@@ -154,7 +154,7 @@ export default function Analytics() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">{t('alertTypeChart')}</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-52">
+              <div className="h-52 min-h-[208px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={alertTypeData} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
@@ -186,7 +186,7 @@ export default function Analytics() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">{t('usersByRole')}</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-52">
+              <div className="h-52 min-h-[208px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={userRoleData} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>

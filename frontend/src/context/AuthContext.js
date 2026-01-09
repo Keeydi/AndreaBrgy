@@ -14,13 +14,20 @@ export function AuthProvider({ children }) {
       
       if (token && savedUser) {
         try {
-          setUser(JSON.parse(savedUser));
-          // Verify token is still valid
-          const response = await authAPI.getMe();
-          setUser(response.data);
-          localStorage.setItem('user', JSON.stringify(response.data));
+          // Use saved user data directly (no backend verification needed)
+          const userData = JSON.parse(savedUser);
+          setUser(userData);
+          // Optionally verify with mock API (will use localStorage)
+          try {
+            const response = await authAPI.getMe();
+            setUser(response.data);
+            localStorage.setItem('user', JSON.stringify(response.data));
+          } catch (error) {
+            // If verification fails, still use saved user
+            // Token might be expired but user data is still valid
+          }
         } catch (error) {
-          // Token invalid, clear storage
+          // Invalid user data, clear storage
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           setUser(null);

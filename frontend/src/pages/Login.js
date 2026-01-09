@@ -34,20 +34,6 @@ export default function Login() {
     }
   };
 
-  const handleDemoLogin = async (demoEmail, demoPassword) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setLoading(true);
-    try {
-      const user = await login(demoEmail, demoPassword);
-      toast.success(`${t('welcomeBack')}, ${user.name}!`);
-      navigate('/dashboard');
-    } catch (error) {
-      toast.error('Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
@@ -118,39 +104,6 @@ export default function Login() {
             <Link to="/register" className="text-primary font-medium hover:underline">
               {t('registerHere')}
             </Link>
-          </div>
-
-          <div className="mt-4 p-3 bg-muted rounded-lg">
-            <p className="text-xs text-muted-foreground mb-2 text-center">{t('quickLogin')}</p>
-            <div className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full h-9 text-xs justify-start gap-2"
-                onClick={() => handleDemoLogin('admin@brgykorokan.gov.ph', 'admin123')}
-                disabled={loading}
-              >
-                <span className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 text-xs font-bold">A</span>
-                {t('admin')}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full h-9 text-xs justify-start gap-2"
-                onClick={() => handleDemoLogin('official@brgykorokan.gov.ph', 'official123')}
-                disabled={loading}
-              >
-                <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 text-xs font-bold">O</span>
-                {t('official')}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full h-9 text-xs justify-start gap-2"
-                onClick={() => handleDemoLogin('pedro@gmail.com', 'resident123')}
-                disabled={loading}
-              >
-                <span className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 text-xs font-bold">R</span>
-                {t('resident')}
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>
