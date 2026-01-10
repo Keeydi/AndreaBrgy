@@ -28,7 +28,22 @@ export default function Login() {
       toast.success(`${t('welcomeBack')}, ${user.name}!`);
       navigate('/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Invalid credentials');
+      // Handle validation errors (422)
+      if (error.response?.status === 422) {
+        const errorData = error.response?.data;
+        if (Array.isArray(errorData?.detail)) {
+          const errorMessages = errorData.detail.map(err => err.msg || err.message || JSON.stringify(err)).join(', ');
+          toast.error(errorMessages || 'Validation error');
+        } else if (typeof errorData?.detail === 'string') {
+          toast.error(errorData.detail);
+        } else {
+          toast.error('Validation error. Please check your input.');
+        }
+      } else {
+        // Handle other errors
+        const errorMessage = error.response?.data?.detail || error.message || 'Invalid credentials';
+        toast.error(typeof errorMessage === 'string' ? errorMessage : 'Invalid credentials');
+      }
     } finally {
       setLoading(false);
     }

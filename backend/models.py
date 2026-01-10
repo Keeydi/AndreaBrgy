@@ -5,9 +5,9 @@ from database import Base
 import enum
 
 class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    OFFICIAL = "official"
-    RESIDENT = "resident"
+    ADMIN = "ADMIN"
+    OFFICIAL = "OFFICIAL"
+    RESIDENT = "RESIDENT"
 
 class AlertType(str, enum.Enum):
     EMERGENCY = "emergency"
@@ -48,7 +48,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.RESIDENT, nullable=False, index=True)
+    role = Column(Enum(UserRole, native_enum=False), default=UserRole.RESIDENT, nullable=False, index=True)
     phone = Column(String(20), nullable=True)
     address = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
@@ -63,11 +63,11 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(Enum(AlertType), nullable=False, index=True)
+    type = Column(Enum(AlertType, native_enum=False), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
-    priority = Column(Enum(AlertPriority), default=AlertPriority.MEDIUM, index=True)
-    status = Column(Enum(AlertStatus), default=AlertStatus.ACTIVE, index=True)
+    priority = Column(Enum(AlertPriority, native_enum=False), default=AlertPriority.MEDIUM, index=True)
+    status = Column(Enum(AlertStatus, native_enum=False), default=AlertStatus.ACTIVE, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -84,11 +84,12 @@ class Report(Base):
     __tablename__ = "reports"
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(Enum(ReportType), nullable=False, index=True)
+    type = Column(Enum(ReportType, native_enum=False), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     location = Column(String(500), nullable=True)
-    status = Column(Enum(ReportStatus), default=ReportStatus.PENDING, index=True)
+    status = Column(Enum(ReportStatus, native_enum=False), default=ReportStatus.PENDING, index=True)
+    official_response = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

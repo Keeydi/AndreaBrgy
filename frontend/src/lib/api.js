@@ -41,6 +41,7 @@ export const authAPI = {
 // Alerts
 export const alertsAPI = {
   getAll: () => api.get('/alerts'),
+  getNew: (since) => api.get('/alerts/new', { params: { since } }),
   create: (data) => api.post('/alerts', data),
 };
 

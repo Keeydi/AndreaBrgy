@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'official', 'resident') NOT NULL DEFAULT 'resident',
+    role ENUM('ADMIN', 'OFFICIAL', 'RESIDENT') NOT NULL DEFAULT 'RESIDENT',
     phone VARCHAR(20) NULL,
     address TEXT NULL,
     created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS reports (
     description TEXT NOT NULL,
     location VARCHAR(500) NULL,
     status ENUM('pending', 'in_progress', 'resolved', 'rejected') NOT NULL DEFAULT 'pending',
+    official_response TEXT NULL,
     created_by INT NOT NULL,
     created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NULL ON UPDATE CURRENT_TIMESTAMP(6),
@@ -97,9 +98,9 @@ CREATE TABLE IF NOT EXISTS system_logs (
 
 /*
 INSERT INTO users (email, password_hash, name, role, phone, address) VALUES
-('admin@brgykorokan.gov.ph', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyY5Y5Y5Y5Y5', 'Barangay Captain', 'admin', '+63 912 345 6789', 'Barangay Hall'),
-('official@brgykorokan.gov.ph', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyY5Y5Y5Y5Y5', 'Barangay Secretary', 'official', '+63 912 345 6790', 'Barangay Hall'),
-('pedro@gmail.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyY5Y5Y5Y5Y5', 'Pedro Santos', 'resident', '+63 912 345 6791', 'Zone 3, Barangay Korokan')
+('admin@brgykorokan.gov.ph', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyY5Y5Y5Y5Y5', 'Barangay Captain', 'ADMIN', '+63 912 345 6789', 'Barangay Hall'),
+('official@brgykorokan.gov.ph', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyY5Y5Y5Y5Y5', 'Barangay Secretary', 'OFFICIAL', '+63 912 345 6790', 'Barangay Hall'),
+('pedro@gmail.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyY5Y5Y5Y5Y5', 'Pedro Santos', 'RESIDENT', '+63 912 345 6791', 'Zone 3, Barangay Korokan')
 ON DUPLICATE KEY UPDATE email=email;
 */
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import os
 import jwt
 import bcrypt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import random
 import html
@@ -83,7 +83,7 @@ def create_access_token(user_id: int, email: str, role: str) -> str:
         "sub": str(user_id),
         "email": email,
         "role": role,
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -145,7 +145,7 @@ def sanitize_input(text: str, max_length: Optional[int] = None) -> str:
 
 def check_rate_limit(identifier: str) -> bool:
     """Check if rate limit is exceeded for login attempts."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     # Clean old attempts
     login_attempts[identifier] = [
         attempt for attempt in login_attempts[identifier]
@@ -158,7 +158,7 @@ def check_rate_limit(identifier: str) -> bool:
 
 def record_login_attempt(identifier: str):
     """Record a login attempt."""
-    login_attempts[identifier].append(datetime.utcnow())
+    login_attempts[identifier].append(datetime.now(timezone.utc))
 
 # Auth Routes
 @app.post("/api/auth/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -271,10 +271,43 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
 @app.get("/api/alerts", response_model=List[AlertResponse])
 def get_alerts(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    since: Optional[datetime] = None
 ):
     # Use eager loading to avoid N+1 queries
-    alerts = db.query(Alert).options(joinedload(Alert.creator)).order_by(desc(Alert.created_at)).all()
+    query = db.query(Alert).options(joinedload(Alert.creator))
+    
+    # If since parameter is provided, only return alerts created after that time
+    if since:
+        query = query.filter(Alert.created_at > since)
+    
+    alerts = query.order_by(desc(Alert.created_at)).all()
+    return [add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name) 
+            for alert in alerts]
+
+@app.get("/api/alerts/new", response_model=List[AlertResponse])
+def get_new_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    since: Optional[str] = Query(None, description="ISO timestamp to get alerts after")
+):
+    """Get alerts created after a specific timestamp (for polling)."""
+    query = db.query(Alert).options(joinedload(Alert.creator)).filter(Alert.status == AlertStatus.ACTIVE)
+    
+    if since:
+        try:
+            # Handle both with and without timezone
+            since_str = since.replace('Z', '+00:00') if since.endswith('Z') else since
+            since_dt = datetime.fromisoformat(since_str)
+            # Ensure timezone aware
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+            query = query.filter(Alert.created_at > since_dt)
+        except (ValueError, AttributeError) as e:
+            # If invalid timestamp, return all active alerts
+            pass
+    
+    alerts = query.order_by(desc(Alert.created_at)).limit(10).all()
     return [add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name) 
             for alert in alerts]
 
@@ -411,11 +444,18 @@ def update_report_status(
     
     report.status = status_data.status
     if status_data.status == ReportStatus.RESOLVED:
-        report.resolved_at = datetime.utcnow()
+        report.resolved_at = datetime.now(timezone.utc)
+    
+    # Update official response if provided
+    if status_data.official_response is not None:
+        sanitized_response = sanitize_input(status_data.official_response, max_length=5000)
+        report.official_response = sanitized_response
     
     # Log action (batch with status update)
-    create_system_log(db, "report_status_update", current_user.id, 
-                     f"Updated report {report_id} status to {status_data.status.value}")
+    log_details = f"Updated report {report_id} status to {status_data.status.value}"
+    if status_data.official_response:
+        log_details += " with response"
+    create_system_log(db, "report_status_update", current_user.id, log_details)
     db.commit()  # Single commit for both operations
     db.refresh(report)
     
@@ -479,6 +519,122 @@ def update_user_role(
     
     return UserResponse.model_validate(user)
 
+# Chatbot Rule Engine
+def get_chatbot_response(message: str) -> str:
+    """Rule-based chatbot that matches keywords and patterns to provide responses."""
+    message_lower = message.lower().strip()
+    
+    # Rule definitions: (keywords, response)
+    rules = [
+        # Office hours
+        (['oras', 'hours', 'open', 'close', 'bukas', 'sara', 'office time', 'orasan'], 
+         "Ang barangay office ay bukas mula Lunes hanggang Biyernes, 8:00 AM - 5:00 PM. "
+         "Para sa emergency, maaari kayong tumawag sa hotline: (02) 123-4567."),
+        
+        # How to report
+        (['report', 'mag-report', 'paano mag-report', 'how to report', 'submit report', 'ireport', 'i-report'],
+         "Para mag-submit ng report:\n"
+         "1. Pumunta sa 'Report' sa menu\n"
+         "2. Piliin ang uri ng problema (Emergency, Crime, Infrastructure, etc.)\n"
+         "3. Ilagay ang detalye ng problema\n"
+         "4. Maglagay ng lokasyon kung saan nangyari\n"
+         "5. I-click ang 'Send Report'\n\n"
+         "Para sa emergency, maaari din kayong tumawag sa barangay hotline."),
+        
+        # Alert types
+        (['alert', 'alerts', 'uri ng alert', 'types of alert', 'anong alert', 'what alerts'],
+         "May apat na uri ng alerts:\n"
+         "• Emergency - Para sa mga emergency na sitwasyon\n"
+         "• Announcement - Mga anunsyo mula sa barangay\n"
+         "• Warning - Mga babala at paalala\n"
+         "• Info - Pangkalahatang impormasyon\n\n"
+         "Makikita ninyo ang lahat ng alerts sa 'Alerts' page."),
+        
+        # Emergency
+        (['emergency', 'emergency report', 'sakuna', 'sunog', 'baha', 'aksidente', 'urgent'],
+         "Para sa emergency:\n"
+         "1. Tumawag agad sa barangay hotline: (02) 123-4567\n"
+         "2. O mag-submit ng emergency report sa app\n"
+         "3. Para sa life-threatening emergencies, tumawag sa 911\n\n"
+         "Ang emergency reports ay inuuna namin at may mabilis na response."),
+        
+        # Services
+        (['service', 'services', 'serbisyo', 'ano ang serbisyo', 'what services', 'available services'],
+         "Mga serbisyo ng barangay:\n"
+         "• Emergency Response\n"
+         "• Report Management\n"
+         "• Community Alerts\n"
+         "• Public Information\n"
+         "• Complaint Handling\n"
+         "• Infrastructure Requests\n\n"
+         "Para sa karagdagang impormasyon, bisitahin ang barangay hall."),
+        
+        # Status check
+        (['status', 'check status', 'report status', 'ano na ang report', 'update', 'update ng report'],
+         "Para makita ang status ng inyong report:\n"
+         "1. Pumunta sa 'My Reports' sa menu\n"
+         "2. Makikita ninyo ang lahat ng inyong reports\n"
+         "3. Ang status ay maaaring: Pending, In Progress, Resolved, o Rejected\n"
+         "4. Makikita din ninyo ang response mula sa barangay officials kung mayroon."),
+        
+        # Contact
+        (['contact', 'tawag', 'phone', 'number', 'telepono', 'paano makipag-ugnayan', 'how to contact'],
+         "Para makipag-ugnayan sa barangay:\n"
+         "• Hotline: (02) 123-4567\n"
+         "• Email: info@brgykorokan.gov.ph\n"
+         "• Address: Barangay Hall, Zone 1, Barangay Korokan\n"
+         "• Office Hours: Lunes-Biyernes, 8:00 AM - 5:00 PM"),
+        
+        # Registration
+        (['register', 'sign up', 'mag-register', 'paano mag-register', 'account', 'gumawa ng account'],
+         "Para mag-register:\n"
+         "1. Pumunta sa 'Register' page\n"
+         "2. Ilagay ang inyong email, pangalan, at password\n"
+         "3. Piliin ang inyong role (Resident, Official, o Admin)\n"
+         "4. I-click ang 'Register'\n\n"
+         "Kailangan ng password na may hindi bababa sa 8 characters, may uppercase, lowercase, at number."),
+        
+        # Greeting
+        (['hello', 'hi', 'kamusta', 'kumusta', 'magandang araw', 'good morning', 'good afternoon', 'good evening'],
+         "Magandang araw! Ako si BarangayBot, ang inyong AI assistant. Paano ko kayo matutulungan ngayon?"),
+        
+        # Help
+        (['help', 'tulong', 'paano', 'how', 'help me', 'tulungan'],
+         "Ako ay nandito para tumulong! Maaari ninyo akong tanungin tungkol sa:\n"
+         "• Oras ng barangay office\n"
+         "• Paano mag-submit ng report\n"
+         "• Mga uri ng alerts\n"
+         "• Status ng inyong reports\n"
+         "• Mga serbisyo ng barangay\n"
+         "• Emergency procedures\n\n"
+         "Ano ang gusto ninyong malaman?"),
+    ]
+    
+    # Check each rule
+    for keywords, response in rules:
+        if any(keyword in message_lower for keyword in keywords):
+            return response
+    
+    # Default response if no rule matches
+    default_responses = [
+        "Pasensya, hindi ko lubos na naintindihan ang inyong tanong. Maaari ba ninyong magtanong tungkol sa:\n"
+        "• Oras ng barangay office\n"
+        "• Paano mag-report\n"
+        "• Mga uri ng alerts\n"
+        "• Status ng reports\n\n"
+        "O subukan ninyong magtanong sa ibang paraan.",
+        
+        "Ako ay nandito para tumulong sa inyong mga katanungan tungkol sa barangay. "
+        "Maaari ba ninyong magtanong tungkol sa office hours, reports, alerts, o serbisyo?",
+        
+        "Para sa mas tiyak na impormasyon, maaari ninyong:\n"
+        "• Bisitahin ang 'Alerts' page para sa mga anunsyo\n"
+        "• Gumawa ng report sa 'Report' page\n"
+        "• Tumawag sa barangay hotline: (02) 123-4567",
+    ]
+    
+    return random.choice(default_responses)
+
 # Chatbot Route
 @app.post("/api/chatbot/query", response_model=ChatbotResponse)
 def chatbot_query(
@@ -486,24 +642,19 @@ def chatbot_query(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Simple mock response - you can integrate with AI services here
-    responses = [
-        "I'm here to help you with barangay-related questions. How can I assist you today?",
-        "You can submit reports, view alerts, and access various barangay services through this platform.",
-        "For emergencies, please contact the barangay hotline or visit the barangay hall.",
-        "I can help you with information about barangay services, report submission, and general inquiries.",
-    ]
+    # Sanitize input
+    sanitized_message = sanitize_input(query.message, max_length=1000)
     
-    response_text = random.choice(responses)
+    # Get rule-based response
+    response_text = get_chatbot_response(sanitized_message)
     
-    # Sanitize and log action
-    sanitized_message = sanitize_input(query.message, max_length=50)
-    create_system_log(db, "chatbot_query", current_user.id, f"Chatbot query: {sanitized_message}")
+    # Log action
+    create_system_log(db, "chatbot_query", current_user.id, f"Chatbot query: {sanitized_message[:50]}")
     db.commit()
     
     return ChatbotResponse(
         response=response_text,
-        session_id=query.session_id or f"session_{datetime.utcnow().timestamp()}"
+        session_id=query.session_id or f"session_{datetime.now(timezone.utc).timestamp()}"
     )
 
 # Dashboard Stats Route - Optimized with single query

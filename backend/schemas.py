@@ -84,6 +84,7 @@ class ReportCreate(ReportBase):
 class ReportResponse(ReportBase):
     id: int
     status: ReportStatus
+    official_response: Optional[str] = None
     created_by: int
     created_by_name: Optional[str] = None
     created_at: datetime
@@ -95,6 +96,7 @@ class ReportResponse(ReportBase):
 
 class ReportStatusUpdate(BaseModel):
     status: ReportStatus
+    official_response: Optional[str] = Field(None, max_length=5000)
 
 # User Management Schemas
 class UserRoleUpdate(BaseModel):

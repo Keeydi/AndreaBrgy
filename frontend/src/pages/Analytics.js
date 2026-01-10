@@ -53,9 +53,9 @@ export default function Analytics() {
   ];
 
   const userRoleData = [
-    { name: t('residents'), value: users.filter(u => u.role === 'resident').length, color: '#3B82F6' },
-    { name: t('officials'), value: users.filter(u => u.role === 'official').length, color: '#8B5CF6' },
-    { name: t('admins'), value: users.filter(u => u.role === 'admin').length, color: '#DC2626' }
+    { name: t('residents'), value: users.filter(u => u.role === 'RESIDENT').length, color: '#3B82F6' },
+    { name: t('officials'), value: users.filter(u => u.role === 'OFFICIAL').length, color: '#8B5CF6' },
+    { name: t('admins'), value: users.filter(u => u.role === 'ADMIN').length, color: '#DC2626' }
   ];
 
   return (
@@ -203,15 +203,15 @@ export default function Analytics() {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <span className="text-sm">{t('residents')}</span>
-                <span className="text-lg font-bold text-blue-600">{users.filter(u => u.role === 'resident').length}</span>
+                <span className="text-lg font-bold text-blue-600">{users.filter(u => u.role === 'RESIDENT').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                 <span className="text-sm">{t('officials')}</span>
-                <span className="text-lg font-bold text-purple-600">{users.filter(u => u.role === 'official').length}</span>
+                <span className="text-lg font-bold text-purple-600">{users.filter(u => u.role === 'OFFICIAL').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <span className="text-sm">{t('admins')}</span>
-                <span className="text-lg font-bold text-red-600">{users.filter(u => u.role === 'admin').length}</span>
+                <span className="text-lg font-bold text-red-600">{users.filter(u => u.role === 'ADMIN').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
                 <span className="text-sm">{t('activeUsers')}</span>

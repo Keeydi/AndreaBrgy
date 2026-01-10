@@ -39,8 +39,22 @@ export default function Register() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    // Check password requirements
+    if (!/[A-Z]/.test(formData.password)) {
+      toast.error('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      toast.error('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/\d/.test(formData.password)) {
+      toast.error('Password must contain at least one number');
       return;
     }
 
@@ -57,7 +71,23 @@ export default function Register() {
       toast.success(`Welcome to BarangayAlert, ${user.name}!`);
       navigate('/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Registration failed');
+      // Handle validation errors (422)
+      if (error.response?.status === 422) {
+        const errorData = error.response?.data;
+        if (Array.isArray(errorData?.detail)) {
+          // FastAPI validation errors are in an array
+          const errorMessages = errorData.detail.map(err => err.msg || err.message || JSON.stringify(err)).join(', ');
+          toast.error(errorMessages || 'Validation error');
+        } else if (typeof errorData?.detail === 'string') {
+          toast.error(errorData.detail);
+        } else {
+          toast.error('Validation error. Please check your input.');
+        }
+      } else {
+        // Handle other errors
+        const errorMessage = error.response?.data?.detail || error.message || 'Registration failed';
+        toast.error(typeof errorMessage === 'string' ? errorMessage : 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -130,7 +160,7 @@ export default function Register() {
                     id="password"
                     name="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Min 6 chars"
+                    placeholder="Min 8 chars, A-Z, a-z, 0-9"
                     value={formData.password}
                     onChange={handleChange}
                     required

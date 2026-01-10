@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { useNotifications } from '../hooks/useNotifications';
 import { alertsAPI } from '../lib/api';
 import { formatRelativeTime, getAlertTypeColor, getAlertBorderClass } from '../lib/utils';
 import { Card, CardContent } from '../components/ui/card';
@@ -12,8 +13,13 @@ export default function Alerts() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const { resetNewAlertsCount } = useNotifications(false); // Don't poll here, just reset count
 
-  useEffect(() => { loadAlerts(); }, []);
+  useEffect(() => { 
+    loadAlerts();
+    resetNewAlertsCount(); // Reset count when viewing alerts page
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadAlerts = async () => {
     try {

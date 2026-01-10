@@ -77,12 +77,12 @@ function AppRoutes() {
       <Route path="/my-reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
       <Route path="/chatbot" element={<ProtectedRoute><Chatbot /></ProtectedRoute>} />
 
-      <Route path="/manage-reports" element={<ProtectedRoute allowedRoles={['official', 'admin']}><ManageReports /></ProtectedRoute>} />
-      <Route path="/create-alert" element={<ProtectedRoute allowedRoles={['official', 'admin']}><CreateAlert /></ProtectedRoute>} />
+      <Route path="/manage-reports" element={<ProtectedRoute allowedRoles={['OFFICIAL', 'ADMIN']}><ManageReports /></ProtectedRoute>} />
+      <Route path="/create-alert" element={<ProtectedRoute allowedRoles={['OFFICIAL', 'ADMIN']}><CreateAlert /></ProtectedRoute>} />
 
-      <Route path="/analytics" element={<ProtectedRoute allowedRoles={['admin']}><Analytics /></ProtectedRoute>} />
-      <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
-      <Route path="/logs" element={<ProtectedRoute allowedRoles={['admin']}><SystemLogs /></ProtectedRoute>} />
+      <Route path="/analytics" element={<ProtectedRoute allowedRoles={['ADMIN']}><Analytics /></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
+      <Route path="/logs" element={<ProtectedRoute allowedRoles={['ADMIN']}><SystemLogs /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

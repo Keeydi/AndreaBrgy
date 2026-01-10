@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useNotifications } from '../hooks/useNotifications';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -34,13 +35,16 @@ import {
 } from 'lucide-react';
 
 export function Layout({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Enable real-time notifications when authenticated
+  const { newAlertsCount } = useNotifications(isAuthenticated);
 
   const handleLogout = () => {
     logout();
@@ -50,10 +54,15 @@ export function Layout({ children }) {
   const getNavItems = () => {
     const base = [
       { path: '/dashboard', label: t('dashboard'), icon: Home },
-      { path: '/alerts', label: t('alerts'), icon: Megaphone },
+      { 
+        path: '/alerts', 
+        label: t('alerts'), 
+        icon: Megaphone,
+        badge: newAlertsCount > 0 ? newAlertsCount : null
+      },
     ];
 
-    if (user?.role === 'resident') {
+    if (user?.role === 'RESIDENT') {
       return [
         ...base,
         { path: '/report', label: t('report'), icon: AlertTriangle },
@@ -63,7 +72,7 @@ export function Layout({ children }) {
       ];
     }
 
-    if (user?.role === 'official') {
+    if (user?.role === 'OFFICIAL') {
       return [
         ...base,
         { path: '/manage-reports', label: t('manageReports'), icon: FileText },
@@ -72,7 +81,7 @@ export function Layout({ children }) {
       ];
     }
 
-    if (user?.role === 'admin') {
+    if (user?.role === 'ADMIN') {
       return [
         ...base,
         { path: '/manage-reports', label: t('manageReports'), icon: FileText },
@@ -133,7 +142,7 @@ export function Layout({ children }) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -142,6 +151,11 @@ export function Layout({ children }) {
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
                 {sidebarOpen && <span>{item.label}</span>}
+                {item.badge && item.badge > 0 && (
+                  <span className={`absolute ${sidebarOpen ? 'right-2' : 'top-1 right-1'} w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center`}>
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -204,7 +218,7 @@ export function Layout({ children }) {
                 key={item.path}
                 to={item.path}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -212,6 +226,11 @@ export function Layout({ children }) {
               >
                 <Icon className="w-4 h-4" />
                 <span>{item.label}</span>
+                {item.badge && item.badge > 0 && (
+                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}

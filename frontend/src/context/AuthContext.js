@@ -74,9 +74,9 @@ export function AuthProvider({ children }) {
     register,
     logout,
     isAuthenticated: !!user,
-    isResident: user?.role === 'resident',
-    isOfficial: user?.role === 'official',
-    isAdmin: user?.role === 'admin',
+    isResident: user?.role === 'RESIDENT',
+    isOfficial: user?.role === 'OFFICIAL',
+    isAdmin: user?.role === 'ADMIN',
   };
 
   return (

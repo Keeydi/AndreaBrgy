@@ -11,9 +11,9 @@ import { toast } from 'sonner';
 import { Users, Search, Loader2, User, Mail, Phone, MapPin, Calendar } from 'lucide-react';
 
 const ROLES = [
-  { value: 'resident', label: 'Resident' },
-  { value: 'official', label: 'Official' },
-  { value: 'admin', label: 'Admin' }
+  { value: 'RESIDENT', label: 'Resident' },
+  { value: 'OFFICIAL', label: 'Official' },
+  { value: 'ADMIN', label: 'Admin' }
 ];
 
 const STATUSES = [
@@ -69,9 +69,9 @@ export default function UserManagement() {
 
   const getRoleBadgeColor = (role) => {
     switch (role) {
-      case 'admin':
+      case 'ADMIN':
         return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-      case 'official':
+      case 'OFFICIAL':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
       default:
         return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
