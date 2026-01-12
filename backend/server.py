@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, case
 from dotenv import load_dotenv
@@ -15,12 +17,12 @@ import html
 from collections import defaultdict
 
 from database import get_db, engine, Base
-from models import User, Alert, Report, SystemLog, UserRole, AlertStatus, ReportStatus
+from models import User, Alert, Report, SystemLog, UserRole, AlertStatus, ReportStatus, AlertType, AlertPriority
 from schemas import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
     AlertCreate, AlertResponse,
     ReportCreate, ReportResponse, ReportStatusUpdate,
-    UserRoleUpdate, ChatbotQuery, ChatbotResponse,
+    UserRoleUpdate, UserPasswordReset, ChatbotQuery, ChatbotResponse,
     DashboardStats, SystemLogResponse
 )
 
@@ -62,6 +64,62 @@ app.add_middleware(
     expose_headers=["Content-Type"],
     max_age=3600,
 )
+
+# Helper function to get CORS headers
+def get_cors_headers(request: Request) -> dict:
+    """Get CORS headers for the request origin."""
+    origin = request.headers.get("origin")
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001"
+    ]
+    
+    headers = {}
+    if origin in allowed_origins:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    
+    return headers
+
+# Exception handler to ensure CORS headers on validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors and ensure CORS headers are included."""
+    headers = get_cors_headers(request)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+        headers=headers
+    )
+
+# Exception handler for HTTPException to ensure CORS headers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions and ensure CORS headers are included."""
+    headers = get_cors_headers(request)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=headers
+    )
+
+# Exception handler for general exceptions to ensure CORS headers
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle general exceptions and ensure CORS headers are included."""
+    headers = get_cors_headers(request)
+    import traceback
+    print(f"Unhandled exception: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=headers
+    )
 
 # Rate limiting storage (in production, use Redis)
 login_attempts = defaultdict(list)
@@ -282,8 +340,20 @@ def get_alerts(
         query = query.filter(Alert.created_at > since)
     
     alerts = query.order_by(desc(Alert.created_at)).all()
-    return [add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name) 
-            for alert in alerts]
+    result = []
+    for alert in alerts:
+        alert_dict = {
+            "id": alert.id,
+            "type": str(alert.type.value) if hasattr(alert.type, 'value') else str(alert.type),
+            "title": alert.title,
+            "message": alert.message,
+            "priority": alert.priority,
+            "status": alert.status,
+            "created_by": alert.created_by,
+            "created_at": alert.created_at
+        }
+        result.append(add_creator_name(AlertResponse.model_validate(alert_dict).model_dump(), alert.creator.name))
+    return result
 
 @app.get("/api/alerts/new", response_model=List[AlertResponse])
 def get_new_alerts(
@@ -308,8 +378,20 @@ def get_new_alerts(
             pass
     
     alerts = query.order_by(desc(Alert.created_at)).limit(10).all()
-    return [add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name) 
-            for alert in alerts]
+    result = []
+    for alert in alerts:
+        alert_dict = {
+            "id": alert.id,
+            "type": str(alert.type.value) if hasattr(alert.type, 'value') else str(alert.type),
+            "title": alert.title,
+            "message": alert.message,
+            "priority": alert.priority,
+            "status": alert.status,
+            "created_by": alert.created_by,
+            "created_at": alert.created_at
+        }
+        result.append(add_creator_name(AlertResponse.model_validate(alert_dict).model_dump(), alert.creator.name))
+    return result
 
 @app.post("/api/alerts", response_model=AlertResponse, status_code=status.HTTP_201_CREATED)
 def create_alert(
@@ -321,11 +403,24 @@ def create_alert(
     sanitized_title = sanitize_input(alert_data.title, max_length=255)
     sanitized_message = sanitize_input(alert_data.message, max_length=5000)
     
+    # Convert alert type to lowercase and map to enum
+    alert_type_lower = alert_data.type.lower()
+    # Map common variations to enum values
+    type_mapping = {
+        'emergency': AlertType.EMERGENCY,
+        'advisory': AlertType.WARNING,  # Map Advisory to Warning
+        'announcement': AlertType.ANNOUNCEMENT,
+        'warning': AlertType.WARNING,
+        'info': AlertType.INFO
+    }
+    # Use mapped type or default to INFO if not found
+    alert_type_enum = type_mapping.get(alert_type_lower, AlertType.INFO)
+    
     new_alert = Alert(
-        type=alert_data.type,
+        type=alert_type_enum,
         title=sanitized_title,
         message=sanitized_message,
-        priority=alert_data.priority,
+        priority=alert_data.priority or AlertPriority.MEDIUM,
         created_by=current_user.id
     )
     
@@ -336,7 +431,19 @@ def create_alert(
     db.commit()  # Single commit for both operations
     db.refresh(new_alert)
     
-    return add_creator_name(AlertResponse.model_validate(new_alert).model_dump(), current_user.name)
+    # Convert alert to dict and ensure type is a string
+    alert_dict = {
+        "id": new_alert.id,
+        "type": str(new_alert.type.value) if hasattr(new_alert.type, 'value') else str(new_alert.type),
+        "title": new_alert.title,
+        "message": new_alert.message,
+        "priority": new_alert.priority,
+        "status": new_alert.status,
+        "created_by": new_alert.created_by,
+        "created_at": new_alert.created_at
+    }
+    
+    return add_creator_name(AlertResponse.model_validate(alert_dict).model_dump(), current_user.name)
 
 @app.put("/api/alerts/{alert_id}", response_model=AlertResponse)
 def update_alert(
@@ -355,14 +462,38 @@ def update_alert(
     # Sanitize input
     alert.title = sanitize_input(alert_data.title, max_length=255)
     alert.message = sanitize_input(alert_data.message, max_length=5000)
-    alert.type = alert_data.type
+    
+    # Convert alert type to lowercase and map to enum
+    alert_type_lower = alert_data.type.lower()
+    # Map common variations to enum values
+    type_mapping = {
+        'emergency': AlertType.EMERGENCY,
+        'advisory': AlertType.WARNING,  # Map Advisory to Warning
+        'announcement': AlertType.ANNOUNCEMENT,
+        'warning': AlertType.WARNING,
+        'info': AlertType.INFO
+    }
+    # Use mapped type or default to INFO if not found
+    alert.type = type_mapping.get(alert_type_lower, AlertType.INFO)
     alert.priority = alert_data.priority
     
     create_system_log(db, "alert_update", current_user.id, f"Updated alert {alert_id}")
     db.commit()
     db.refresh(alert)
     
-    return add_creator_name(AlertResponse.model_validate(alert).model_dump(), alert.creator.name)
+    # Convert alert to dict and ensure type is a string
+    alert_dict = {
+        "id": alert.id,
+        "type": str(alert.type.value) if hasattr(alert.type, 'value') else str(alert.type),
+        "title": alert.title,
+        "message": alert.message,
+        "priority": alert.priority,
+        "status": alert.status,
+        "created_by": alert.created_by,
+        "created_at": alert.created_at
+    }
+    
+    return add_creator_name(AlertResponse.model_validate(alert_dict).model_dump(), alert.creator.name)
 
 @app.delete("/api/alerts/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alert(
@@ -514,6 +645,35 @@ def update_user_role(
     # Log action (batch with role update)
     create_system_log(db, "user_role_update", current_user.id, 
                      f"Updated user {user_id} role to {role_data.role.value}")
+    db.commit()  # Single commit for both operations
+    db.refresh(user)
+    
+    return UserResponse.model_validate(user)
+
+@app.put("/api/users/{user_id}/password", response_model=UserResponse)
+def reset_user_password(
+    user_id: int,
+    password_data: UserPasswordReset,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    """
+    Reset password for a user. Admin only.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Hash the new password
+    hashed_password = hash_password(password_data.new_password)
+    user.password_hash = hashed_password
+    
+    # Log action (batch with password update)
+    create_system_log(db, "user_password_reset", current_user.id, 
+                     f"Reset password for user {user_id} ({user.email})")
     db.commit()  # Single commit for both operations
     db.refresh(user)
     

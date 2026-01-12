@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 import re
@@ -53,10 +53,25 @@ class TokenResponse(BaseModel):
 
 # Alert Schemas
 class AlertBase(BaseModel):
-    type: AlertType
-    title: str = Field(..., min_length=3, max_length=255)
-    message: str = Field(..., min_length=10, max_length=5000)
-    priority: AlertPriority = AlertPriority.MEDIUM
+    type: str = Field(..., max_length=50)
+    title: str = Field(..., min_length=1, max_length=255)
+    message: str = Field(..., min_length=1, max_length=5000)
+    priority: Optional[AlertPriority] = Field(default=AlertPriority.MEDIUM)
+    
+    @field_validator('type', mode='before')
+    @classmethod
+    def normalize_type(cls, v):
+        """Normalize alert type to lowercase for validation."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
+    
+    @model_validator(mode='after')
+    def ensure_priority(self):
+        """Ensure priority is always set."""
+        if self.priority is None:
+            self.priority = AlertPriority.MEDIUM
+        return self
 
 class AlertCreate(AlertBase):
     pass
@@ -77,6 +92,26 @@ class ReportBase(BaseModel):
     title: str = Field(..., min_length=3, max_length=255)
     description: str = Field(..., min_length=10, max_length=5000)
     location: Optional[str] = Field(None, max_length=500)
+    
+    @field_validator('type', mode='before')
+    @classmethod
+    def normalize_report_type(cls, v):
+        """Normalize report type to enum value."""
+        if isinstance(v, str):
+            # Convert to lowercase and map to enum
+            v_lower = v.lower()
+            type_mapping = {
+                'emergency': ReportType.EMERGENCY,
+                'crime': ReportType.CRIME,
+                'infrastructure': ReportType.INFRASTRUCTURE,
+                'health': ReportType.HEALTH,
+                'flood': ReportType.FLOOD,
+                'complaint': ReportType.COMPLAINT,
+                'request': ReportType.REQUEST,
+                'other': ReportType.OTHER
+            }
+            return type_mapping.get(v_lower, ReportType.OTHER)
+        return v
 
 class ReportCreate(ReportBase):
     pass
@@ -101,6 +136,22 @@ class ReportStatusUpdate(BaseModel):
 # User Management Schemas
 class UserRoleUpdate(BaseModel):
     role: UserRole
+
+class UserPasswordReset(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=128)
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_password_strength(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one number')
+        return v
 
 # Chatbot Schemas
 class ChatbotQuery(BaseModel):

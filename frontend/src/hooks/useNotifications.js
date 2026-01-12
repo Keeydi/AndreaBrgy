@@ -7,10 +7,11 @@ import { toast } from 'sonner';
  * Polls for new alerts and shows browser notifications
  */
 export function useNotifications(enabled = true) {
-  const [lastCheckTime, setLastCheckTime] = useState(new Date().toISOString());
   const [newAlertsCount, setNewAlertsCount] = useState(0);
   const intervalRef = useRef(null);
   const notificationPermissionRef = useRef(null);
+  const lastCheckTimeRef = useRef(new Date().toISOString());
+  const shownAlertIdsRef = useRef(new Set()); // Track which alerts have been shown
 
   // Request notification permission on mount
   useEffect(() => {
@@ -29,44 +30,56 @@ export function useNotifications(enabled = true) {
 
     const checkForNewAlerts = async () => {
       try {
-        const response = await alertsAPI.getNew(lastCheckTime);
+        const response = await alertsAPI.getNew(lastCheckTimeRef.current);
         const newAlerts = response.data || [];
 
         if (newAlerts.length > 0) {
-          setNewAlertsCount((prev) => prev + newAlerts.length);
-
-          // Show browser notification for each new alert
-          newAlerts.forEach((alert) => {
-            // Show toast notification
-            const alertTypeColors = {
-              emergency: 'error',
-              warning: 'warning',
-              announcement: 'info',
-              info: 'info',
-            };
-
-            toast[alertTypeColors[alert.type] || 'info'](alert.title, {
-              description: alert.message.substring(0, 100) + (alert.message.length > 100 ? '...' : ''),
-              duration: 5000,
-            });
-
-            // Show browser notification if permission granted
-            if (
-              'Notification' in window &&
-              notificationPermissionRef.current === 'granted'
-            ) {
-              new Notification(`New ${alert.type} Alert: ${alert.title}`, {
-                body: alert.message.substring(0, 200),
-                icon: '/favicon.ico',
-                badge: '/favicon.ico',
-                tag: `alert-${alert.id}`,
-                requireInteraction: alert.type === 'emergency' || alert.priority === 'high',
-              });
+          // Filter out alerts that have already been shown
+          const unseenAlerts = newAlerts.filter(alert => {
+            if (shownAlertIdsRef.current.has(alert.id)) {
+              return false; // Already shown, skip it
             }
+            shownAlertIdsRef.current.add(alert.id); // Mark as shown
+            return true;
           });
 
-          // Update last check time
-          setLastCheckTime(new Date().toISOString());
+          if (unseenAlerts.length > 0) {
+            setNewAlertsCount((prev) => prev + unseenAlerts.length);
+
+            // Show notification for each unseen alert (only once)
+            unseenAlerts.forEach((alert) => {
+              // Show toast notification
+              const alertTypeColors = {
+                emergency: 'error',
+                warning: 'warning',
+                announcement: 'info',
+                info: 'info',
+              };
+
+              toast[alertTypeColors[alert.type] || 'info'](alert.title, {
+                description: alert.message.substring(0, 100) + (alert.message.length > 100 ? '...' : ''),
+                duration: 5000,
+                id: `alert-${alert.id}`, // Use alert ID as toast ID to prevent duplicates
+              });
+
+              // Show browser notification if permission granted
+              if (
+                'Notification' in window &&
+                notificationPermissionRef.current === 'granted'
+              ) {
+                new Notification(`New ${alert.type} Alert: ${alert.title}`, {
+                  body: alert.message.substring(0, 200),
+                  icon: '/favicon.ico',
+                  badge: '/favicon.ico',
+                  tag: `alert-${alert.id}`, // Browser uses tag to prevent duplicate notifications
+                  requireInteraction: alert.type === 'emergency' || alert.priority === 'high',
+                });
+              }
+            });
+
+            // Update last check time only after processing alerts
+            lastCheckTimeRef.current = new Date().toISOString();
+          }
         }
       } catch (error) {
         // Silently fail - don't spam errors for polling
@@ -87,10 +100,13 @@ export function useNotifications(enabled = true) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [enabled, lastCheckTime]);
+  }, [enabled]); // Removed lastCheckTime from dependencies to prevent re-running
 
   const resetNewAlertsCount = () => {
     setNewAlertsCount(0);
+    // Update last check time to current time when user views alerts page
+    // This prevents showing notifications for alerts they've already seen
+    lastCheckTimeRef.current = new Date().toISOString();
   };
 
   return {

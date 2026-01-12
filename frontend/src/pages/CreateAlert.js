@@ -67,12 +67,28 @@ export default function CreateAlert() {
       await alertsAPI.create({
         title: formData.title.trim(),
         message: formData.message.trim(),
-        type: formData.type
+        type: formData.type.toLowerCase()
       });
       toast.success('Alert created successfully!');
       navigate('/alerts');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create alert');
+      // Handle validation errors (422)
+      if (error.response?.status === 422) {
+        const errorData = error.response?.data;
+        if (Array.isArray(errorData?.detail)) {
+          // FastAPI validation errors are in an array
+          const errorMessages = errorData.detail.map(err => err.msg || err.message || JSON.stringify(err)).join(', ');
+          toast.error(errorMessages || 'Validation error');
+        } else if (typeof errorData?.detail === 'string') {
+          toast.error(errorData.detail);
+        } else {
+          toast.error('Validation error. Please check your input.');
+        }
+      } else {
+        // Handle other errors
+        const errorMessage = error.response?.data?.detail || error.message || 'Failed to create alert';
+        toast.error(typeof errorMessage === 'string' ? errorMessage : 'Failed to create alert');
+      }
     } finally {
       setLoading(false);
     }

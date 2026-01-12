@@ -32,15 +32,48 @@ export default function Report() {
 
     setLoading(true);
     try {
+      // Map frontend report types to backend enum values
+      const typeMapping = {
+        'Emergency': 'emergency',
+        'Crime': 'crime',
+        'Infrastructure': 'infrastructure',
+        'Health': 'health',
+        'Flood': 'flood',
+        'Other': 'other'
+      };
+      
+      // Generate title from description (first 100 chars) or use a default
+      const description = formData.description.trim();
+      const title = description.length > 100 
+        ? description.substring(0, 97) + '...' 
+        : description.substring(0, 50) || 'Report';
+      
       await reportsAPI.create({
-        report_type: formData.report_type,
-        description: formData.description.trim(),
+        type: typeMapping[formData.report_type] || 'other', // Backend expects lowercase enum values
+        title: title,
+        description: description,
         location: formData.location.trim() || null
       });
       toast.success(t('reportSuccess'));
       navigate('/my-reports');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed');
+      // Handle validation errors (422)
+      if (error.response?.status === 422) {
+        const errorData = error.response?.data;
+        if (Array.isArray(errorData?.detail)) {
+          // FastAPI validation errors are in an array
+          const errorMessages = errorData.detail.map(err => err.msg || err.message || JSON.stringify(err)).join(', ');
+          toast.error(errorMessages || 'Validation error');
+        } else if (typeof errorData?.detail === 'string') {
+          toast.error(errorData.detail);
+        } else {
+          toast.error('Validation error. Please check your input.');
+        }
+      } else {
+        // Handle other errors
+        const errorMessage = error.response?.data?.detail || error.message || 'Failed to create report';
+        toast.error(typeof errorMessage === 'string' ? errorMessage : 'Failed to create report');
+      }
     } finally {
       setLoading(false);
     }
